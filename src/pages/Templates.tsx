@@ -4,6 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { FileText, Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { useState } from "react";
+import { TemplateFormDialog } from "@/components/TemplateFormDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const templatesData = [
   { id: 1, name: "BWS_CV_Master_v2025.10-1.docx", type: "CV Template", version: "2025.10-1", lastChecked: "2024-11-10", status: "OK", category: "cv" },
@@ -25,7 +27,17 @@ const placeholdersData = [
 
 export default function Templates() {
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
+  
   const selectedTemplateData = templatesData.find(t => t.id === selectedTemplate);
+
+  const handleUploadTemplate = (data: any) => {
+    toast({
+      title: "Template uploaded",
+      description: `${data.name} has been uploaded successfully.`,
+    });
+  };
 
   const cvTemplates = templatesData.filter(t => t.category === "cv");
   const slideTemplates = templatesData.filter(t => t.category === "slide");
@@ -35,11 +47,17 @@ export default function Templates() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Templates</h1>
-        <Button>
+        <Button onClick={() => setIsDialogOpen(true)}>
           <Upload className="h-4 w-4" />
           Upload Template
         </Button>
       </div>
+
+      <TemplateFormDialog 
+        open={isDialogOpen} 
+        onOpenChange={setIsDialogOpen}
+        onSubmit={handleUploadTemplate}
+      />
 
       <div className="flex gap-6">
         <div className="flex-1 space-y-6">

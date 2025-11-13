@@ -6,6 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, Download, DollarSign } from "lucide-react";
 import { useState } from "react";
+import { InvoiceFormDialog } from "@/components/InvoiceFormDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const invoicesData = [
   { id: 1, number: "BWS0008", firm: "Brookfield", mandate: "Infrastructure PE Partner", amount: "£120,000", vat: "£24,000", total: "£144,000", status: "Issued", deal: "BWS002" },
@@ -31,17 +33,44 @@ const plByTeamData = [
 
 export default function Finance() {
   const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [firmFilter, setFirmFilter] = useState("");
+  const { toast } = useToast();
+  
   const selectedInvoiceData = invoicesData.find(i => i.id === selectedInvoice);
+
+  const filteredInvoices = invoicesData.filter((invoice) => {
+    const matchesSearch = invoice.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         invoice.firm.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = !statusFilter || invoice.status.toLowerCase().includes(statusFilter.toLowerCase());
+    const matchesFirm = !firmFilter || invoice.firm.toLowerCase().includes(firmFilter.toLowerCase());
+    return matchesSearch && matchesStatus && matchesFirm;
+  });
+
+  const handleCreateInvoice = (data: any) => {
+    toast({
+      title: "Invoice created",
+      description: `Invoice ${data.invoiceNumber} has been created successfully.`,
+    });
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Finance</h1>
-        <Button>
+        <Button onClick={() => setIsDialogOpen(true)}>
           <DollarSign className="h-4 w-4" />
           Create Invoice
         </Button>
       </div>
+
+      <InvoiceFormDialog 
+        open={isDialogOpen} 
+        onOpenChange={setIsDialogOpen}
+        onSubmit={handleCreateInvoice}
+      />
 
       <Tabs defaultValue="invoices" className="space-y-6">
         <TabsList>
@@ -56,10 +85,25 @@ export default function Finance() {
                 <div className="flex items-center gap-4">
                   <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search invoices..." className="pl-9" />
+                    <Input 
+                      placeholder="Search invoices..." 
+                      className="pl-9"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                   </div>
-                  <Button variant="outline">Filter by Status</Button>
-                  <Button variant="outline">Filter by Firm</Button>
+                  <Input 
+                    placeholder="Filter by Status" 
+                    className="w-48"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  />
+                  <Input 
+                    placeholder="Filter by Firm" 
+                    className="w-48"
+                    value={firmFilter}
+                    onChange={(e) => setFirmFilter(e.target.value)}
+                  />
                 </div>
               </CardHeader>
               <CardContent>
@@ -76,7 +120,7 @@ export default function Finance() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoicesData.map((invoice) => (
+                    {filteredInvoices.map((invoice) => (
                       <TableRow 
                         key={invoice.id}
                         className="cursor-pointer hover:bg-muted/50"

@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, Building2, Users, Briefcase, TrendingUp } from "lucide-react";
 import { useState } from "react";
+import { FirmFormDialog } from "@/components/FirmFormDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const firmsData = [
   { id: 1, name: "Goldman Sachs", sector: "Investment Bank", region: "Global", teams: 12, mandates: 3 },
@@ -31,17 +33,44 @@ const dealsData = [
 
 export default function Firms() {
   const [selectedFirm, setSelectedFirm] = useState<number | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sectorFilter, setSectorFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState("all");
+  const { toast } = useToast();
+  
   const selectedFirmData = firmsData.find(f => f.id === selectedFirm);
+
+  const filteredFirms = firmsData.filter((firm) => {
+    const matchesSearch = firm.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         firm.sector.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSector = sectorFilter === "all" || firm.sector === sectorFilter;
+    const matchesRegion = regionFilter === "all" || firm.region === regionFilter;
+    return matchesSearch && matchesSector && matchesRegion;
+  });
+
+  const handleAddFirm = (data: any) => {
+    toast({
+      title: "Firm created",
+      description: `${data.name} has been added successfully.`,
+    });
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Firms</h1>
-        <Button>
+        <Button onClick={() => setIsDialogOpen(true)}>
           <Building2 className="h-4 w-4" />
           Add Firm
         </Button>
       </div>
+
+      <FirmFormDialog 
+        open={isDialogOpen} 
+        onOpenChange={setIsDialogOpen}
+        onSubmit={handleAddFirm}
+      />
 
       <div className="flex gap-6">
         <Card className="flex-1">
@@ -49,28 +78,33 @@ export default function Firms() {
             <div className="flex items-center gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search firms..." className="pl-9" />
+                <Input 
+                  placeholder="Search firms..." 
+                  className="pl-9"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
-              <Select>
+              <Select value={sectorFilter} onValueChange={setSectorFilter}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Sector" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Sectors</SelectItem>
-                  <SelectItem value="ib">Investment Bank</SelectItem>
-                  <SelectItem value="pe">Private Equity</SelectItem>
-                  <SelectItem value="am">Asset Manager</SelectItem>
+                  <SelectItem value="Investment Bank">Investment Bank</SelectItem>
+                  <SelectItem value="Private Equity">Private Equity</SelectItem>
+                  <SelectItem value="Asset Manager">Asset Manager</SelectItem>
                 </SelectContent>
               </Select>
-              <Select>
+              <Select value={regionFilter} onValueChange={setRegionFilter}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Region" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Regions</SelectItem>
-                  <SelectItem value="global">Global</SelectItem>
-                  <SelectItem value="emea">EMEA</SelectItem>
-                  <SelectItem value="americas">Americas</SelectItem>
+                  <SelectItem value="Global">Global</SelectItem>
+                  <SelectItem value="EMEA">EMEA</SelectItem>
+                  <SelectItem value="Americas">Americas</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -87,7 +121,7 @@ export default function Firms() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {firmsData.map((firm) => (
+                {filteredFirms.map((firm) => (
                   <TableRow 
                     key={firm.id}
                     className="cursor-pointer hover:bg-muted/50"

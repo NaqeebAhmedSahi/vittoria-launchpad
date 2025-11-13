@@ -5,6 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, DollarSign } from "lucide-react";
 import { useState } from "react";
+import { DealFormDialog } from "@/components/DealFormDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const dealsData = [
   { id: 1, deal: "BWS001 - MD ECM Placement", firm: "Goldman Sachs", team: "ECM London", mandate: "ECM – Global Bank – London", amount: "£180,000", status: "Closed" },
@@ -16,17 +18,44 @@ const dealsData = [
 
 export default function Deals() {
   const [selectedDeal, setSelectedDeal] = useState<number | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [firmFilter, setFirmFilter] = useState("");
+  const { toast } = useToast();
+  
   const selectedDealData = dealsData.find(d => d.id === selectedDeal);
+
+  const filteredDeals = dealsData.filter((deal) => {
+    const matchesSearch = deal.deal.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         deal.firm.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = !statusFilter || deal.status.toLowerCase().includes(statusFilter.toLowerCase());
+    const matchesFirm = !firmFilter || deal.firm.toLowerCase().includes(firmFilter.toLowerCase());
+    return matchesSearch && matchesStatus && matchesFirm;
+  });
+
+  const handleAddDeal = (data: any) => {
+    toast({
+      title: "Deal created",
+      description: `${data.name} has been added successfully.`,
+    });
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Deals</h1>
-        <Button>
+        <Button onClick={() => setIsDialogOpen(true)}>
           <DollarSign className="h-4 w-4" />
           Add Deal
         </Button>
       </div>
+
+      <DealFormDialog 
+        open={isDialogOpen} 
+        onOpenChange={setIsDialogOpen}
+        onSubmit={handleAddDeal}
+      />
 
       <div className="flex gap-6">
         <Card className="flex-1">
@@ -34,10 +63,25 @@ export default function Deals() {
             <div className="flex items-center gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search deals..." className="pl-9" />
+                <Input 
+                  placeholder="Search deals..." 
+                  className="pl-9"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
-              <Button variant="outline">Filter by Status</Button>
-              <Button variant="outline">Filter by Firm</Button>
+              <Input 
+                placeholder="Filter by Status" 
+                className="w-48"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              />
+              <Input 
+                placeholder="Filter by Firm" 
+                className="w-48"
+                value={firmFilter}
+                onChange={(e) => setFirmFilter(e.target.value)}
+              />
             </div>
           </CardHeader>
           <CardContent>
@@ -53,7 +97,7 @@ export default function Deals() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {dealsData.map((deal) => (
+                {filteredDeals.map((deal) => (
                   <TableRow 
                     key={deal.id}
                     className="cursor-pointer hover:bg-muted/50"

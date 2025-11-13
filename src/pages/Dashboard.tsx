@@ -1,74 +1,69 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
-import { Users, Briefcase, Building2, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FileText, Briefcase, Users, DollarSign } from "lucide-react";
+import { StatusChip } from "@/components/StatusChip";
+
+const recentCVs = [
+  { fileName: "CV_FMB 2025.pdf", candidate: "Francesco Vignola", status: "Parsed", variant: "info" as const },
+  { fileName: "Tamim Ahmad CV.pdf", candidate: "Tamim Ahmad", status: "Approved", variant: "success" as const },
+  { fileName: "Holly Ha CV.pdf", candidate: "Holly Ha", status: "Needs review", variant: "warning" as const },
+  { fileName: "Edward Berwin CV.pdf", candidate: "Edward Berwin", status: "Parsed", variant: "info" as const },
+];
+
+const recentMandates = [
+  { name: "ECM - Global Bank - London", firm: "Morgan Stanley", status: "Shortlist", stage: "5 candidates" },
+  { name: "Private Credit - Asset Manager", firm: "KKR", status: "Research", stage: "2 candidates" },
+  { name: "Infrastructure PE Partner", firm: "Brookfield", status: "Interview", stage: "3 candidates" },
+];
 
 export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Overview of your recruitment pipeline
-        </p>
+        <h1 className="text-2xl font-semibold text-foreground mb-1">Dashboard</h1>
+        <p className="text-sm text-muted-foreground">High-level view of your executive search pipeline</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Top KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="New CVs this week" value={8} subtext="+3 vs last week" icon={FileText} trend="up" />
+        <StatCard title="Active mandates" value={12} subtext="5 in Shortlist, 3 in Interview" icon={Briefcase} />
+        <StatCard title="Candidates in process" value={47} subtext="Across all active mandates" icon={Users} />
         <StatCard
-          title="Active Candidates"
-          value="248"
-          icon={Users}
-          trend="up"
-          subtext="+12% vs last month"
-        />
-        <StatCard
-          title="Open Mandates"
-          value="18"
-          icon={Briefcase}
-          trend="up"
-          subtext="+3 vs last month"
-        />
-        <StatCard
-          title="Active Firms"
-          value="42"
-          icon={Building2}
-          trend="up"
-          subtext="+5 vs last month"
-        />
-        <StatCard
-          title="Placements MTD"
-          value="7"
-          icon={TrendingUp}
-          trend="up"
-          subtext="+2 vs last month"
+          title="Invoices due"
+          value="£260k"
+          subtext="3 invoices outstanding"
+          icon={DollarSign}
+          trend="neutral"
         />
       </div>
 
-      {/* Recent Activity */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Clock className="h-5 w-5 text-muted-foreground" />
-              Recent Activity
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Mandates by Stage</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {[
-                { action: "New candidate", name: "Sarah Mitchell", time: "2 hours ago" },
-                { action: "Mandate updated", name: "Senior PM - TechCorp", time: "4 hours ago" },
-                { action: "Interview scheduled", name: "John Davis", time: "5 hours ago" },
-                { action: "CV imported", name: "Emma Thompson", time: "6 hours ago" },
-                { action: "Placement confirmed", name: "Michael Chen", time: "1 day ago" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-start gap-3 pb-3 border-b last:border-0 last:pb-0">
-                  <div className="h-2 w-2 rounded-full bg-primary mt-2" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{item.action}</p>
-                    <p className="text-sm text-muted-foreground truncate">{item.name}</p>
+                { stage: "Research", count: 2, color: "bg-status-info" },
+                { stage: "Shortlist", count: 5, color: "bg-primary" },
+                { stage: "Interview", count: 3, color: "bg-secondary" },
+                { stage: "Offer", count: 0, color: "bg-status-warning" },
+                { stage: "Placed", count: 2, color: "bg-status-success" },
+              ].map((item) => (
+                <div key={item.stage} className="flex items-center gap-3">
+                  <div className="w-24 text-sm text-muted-foreground">{item.stage}</div>
+                  <div className="flex-1 bg-muted rounded-full h-8 overflow-hidden">
+                    <div
+                      className={`${item.color} h-full flex items-center px-3 text-xs font-medium text-white`}
+                      style={{ width: `${(item.count / 12) * 100}%` }}
+                    >
+                      {item.count > 0 && item.count}
+                    </div>
                   </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{item.time}</span>
+                  <div className="w-12 text-sm text-foreground font-medium text-right">{item.count}</div>
                 </div>
               ))}
             </div>
@@ -77,29 +72,27 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
-              Upcoming Tasks
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Fees by Team</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {[
-                { task: "Follow up with candidate", candidate: "Alice Johnson", due: "Today" },
-                { task: "Client presentation", firm: "GlobalTech Inc", due: "Tomorrow" },
-                { task: "Reference check", candidate: "Robert Lee", due: "Tomorrow" },
-                { task: "Contract review", mandate: "CFO - FinServe", due: "In 2 days" },
-                { task: "Quarterly review", firm: "InnovateCo", due: "In 3 days" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-start gap-3 pb-3 border-b last:border-0 last:pb-0">
-                  <input type="checkbox" className="mt-1 h-4 w-4 rounded border-input" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{item.task}</p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {item.candidate || item.firm || item.mandate}
-                    </p>
+                { team: "ECM", fees: "£420k", percentage: 35 },
+                { team: "Private Equity", fees: "£380k", percentage: 32 },
+                { team: "Infrastructure", fees: "£260k", percentage: 22 },
+                { team: "Real Estate", fees: "£140k", percentage: 11 },
+              ].map((item) => (
+                <div key={item.team} className="flex items-center gap-3">
+                  <div className="w-32 text-sm text-muted-foreground">{item.team}</div>
+                  <div className="flex-1 bg-muted rounded-full h-8 overflow-hidden">
+                    <div
+                      className="bg-secondary h-full flex items-center px-3 text-xs font-medium text-white"
+                      style={{ width: `${item.percentage}%` }}
+                    >
+                      {item.fees}
+                    </div>
                   </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{item.due}</span>
+                  <div className="w-16 text-sm text-foreground font-medium text-right">{item.percentage}%</div>
                 </div>
               ))}
             </div>
@@ -107,29 +100,58 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Pipeline Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Pipeline Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-5">
-            {[
-              { stage: "Applied", count: 45, color: "bg-blue-500" },
-              { stage: "Screened", count: 32, color: "bg-indigo-500" },
-              { stage: "Shortlist", count: 18, color: "bg-purple-500" },
-              { stage: "Interview", count: 12, color: "bg-pink-500" },
-              { stage: "Offer", count: 5, color: "bg-green-500" },
-            ].map((item) => (
-              <div key={item.stage} className="text-center space-y-2">
-                <div className={`h-2 rounded-full ${item.color}`} />
-                <p className="text-2xl font-bold">{item.count}</p>
-                <p className="text-sm text-muted-foreground">{item.stage}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Recent Activity Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold">Recently Ingested CVs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentCVs.map((cv, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border border-border"
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{cv.fileName}</p>
+                      <p className="text-xs text-muted-foreground">{cv.candidate}</p>
+                    </div>
+                  </div>
+                  <StatusChip status={cv.status} variant={cv.variant} />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold">Recently Updated Mandates</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentMandates.map((mandate, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border border-border"
+                >
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">{mandate.name}</p>
+                    <p className="text-xs text-muted-foreground">{mandate.firm}</p>
+                  </div>
+                  <div className="text-right">
+                    <StatusChip status={mandate.status} variant="info" className="mb-1" />
+                    <p className="text-xs text-muted-foreground">{mandate.stage}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

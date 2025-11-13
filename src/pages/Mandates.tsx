@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/StatusChip";
 import { Search, Filter, LayoutGrid, List } from "lucide-react";
 import { useState } from "react";
+import { MandateFormDialog } from "@/components/MandateFormDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const mandatesData = [
   {
@@ -54,18 +56,54 @@ const mandatesData = [
 
 export default function Mandates() {
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [data, setData] = useState(mandatesData);
+  const { toast } = useToast();
+
+  const handleSubmit = (formData: any) => {
+    const newMandate = {
+      id: data.length + 1,
+      name: formData.name,
+      firm: formData.firm,
+      role: formData.role,
+      status: "Research",
+      variant: "neutral" as const,
+      candidates: 0,
+      lead: formData.lead,
+      opened: new Date().toISOString().split('T')[0],
+    };
+    setData([...data, newMandate]);
+    toast({
+      title: "Mandate created",
+      description: `${formData.name} has been added successfully`,
+    });
+  };
+
+  const filteredData = data.filter(mandate => {
+    if (searchQuery === "") return true;
+    return mandate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           mandate.firm.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground mb-1">Mandates / Projects</h1>
-          <p className="text-sm text-muted-foreground">Manage your active search mandates</p>
+    <>
+      <MandateFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSubmit={handleSubmit}
+      />
+      
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground mb-1">Mandates / Projects</h1>
+            <p className="text-sm text-muted-foreground">Manage your active search mandates</p>
+          </div>
+          <Button className="gap-2" onClick={() => setDialogOpen(true)}>
+            <span>+ New Mandate</span>
+          </Button>
         </div>
-        <Button className="gap-2">
-          <span>+ New Mandate</span>
-        </Button>
-      </div>
 
       <Card>
         <CardContent className="p-0">
@@ -77,6 +115,8 @@ export default function Mandates() {
                 <Input
                   placeholder="Search mandates by name or firm..."
                   className="pl-9 h-9 text-sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </div>
@@ -136,7 +176,7 @@ export default function Mandates() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mandatesData.map((mandate) => (
+                  {filteredData.map((mandate) => (
                     <tr
                       key={mandate.id}
                       className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
@@ -168,11 +208,11 @@ export default function Mandates() {
                     <div className="bg-muted/50 rounded-lg p-3 mb-3">
                       <h3 className="text-sm font-semibold text-foreground">{stage}</h3>
                       <span className="text-xs text-muted-foreground">
-                        {mandatesData.filter(m => m.status === stage).length} mandates
+                        {filteredData.filter(m => m.status === stage).length} mandates
                       </span>
                     </div>
                     <div className="space-y-3">
-                      {mandatesData
+                      {filteredData
                         .filter(m => m.status === stage)
                         .map((mandate) => (
                           <Card key={mandate.id} className="hover:shadow-md transition-shadow cursor-pointer">
@@ -195,5 +235,6 @@ export default function Mandates() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/StatusChip";
 import { Upload, FolderPlus, Search, FileText } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
 
 const intakeData = [
   {
@@ -58,6 +59,11 @@ const statusFilters = ["All", "New", "Parsed", "Needs review", "Approved", "Reje
 export default function Intake() {
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [data, setData] = useState(intakeData);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const toggleRow = (id: number) => {
     setSelectedRows(prev =>
@@ -67,9 +73,37 @@ export default function Intake() {
 
   const toggleAll = () => {
     setSelectedRows(prev =>
-      prev.length === intakeData.length ? [] : intakeData.map(item => item.id)
+      prev.length === filteredData.length ? [] : filteredData.map(item => item.id)
     );
   };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      toast({
+        title: "Files uploaded",
+        description: `${files.length} file(s) uploaded successfully`,
+      });
+    }
+  };
+
+  const handleFolderUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      toast({
+        title: "Folder uploaded",
+        description: `${files.length} file(s) from folder uploaded successfully`,
+      });
+    }
+  };
+
+  const filteredData = data.filter(item => {
+    const matchesStatus = selectedStatus === "All" || item.status === selectedStatus;
+    const matchesSearch = searchQuery === "" || 
+      item.fileName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.candidate.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
 
   return (
     <div className="space-y-6">
@@ -84,11 +118,26 @@ export default function Intake() {
         <CardContent className="p-0">
           {/* Toolbar */}
           <div className="p-4 border-b border-border flex flex-wrap items-center gap-3">
-            <Button size="sm" className="gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              multiple
+              accept=".pdf,.doc,.docx"
+              className="hidden"
+            />
+            <input
+              type="file"
+              ref={folderInputRef}
+              onChange={handleFolderUpload}
+              multiple
+              className="hidden"
+            />
+            <Button size="sm" className="gap-2" onClick={() => fileInputRef.current?.click()}>
               <Upload className="h-4 w-4" />
               Add files
             </Button>
-            <Button size="sm" variant="outline" className="gap-2">
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => folderInputRef.current?.click()}>
               <FolderPlus className="h-4 w-4" />
               Add folder
             </Button>
@@ -99,6 +148,8 @@ export default function Intake() {
                 <Input
                   placeholder="Search files or candidates..."
                   className="pl-9 h-8 text-sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </div>
@@ -125,7 +176,7 @@ export default function Intake() {
                 <tr>
                   <th className="text-left p-3 w-12">
                     <Checkbox
-                      checked={selectedRows.length === intakeData.length}
+                      checked={selectedRows.length === filteredData.length && filteredData.length > 0}
                       onCheckedChange={toggleAll}
                     />
                   </th>
@@ -153,7 +204,7 @@ export default function Intake() {
                 </tr>
               </thead>
               <tbody>
-                {intakeData.map((item) => (
+                {filteredData.map((item) => (
                   <tr
                     key={item.id}
                     className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"

@@ -1,171 +1,232 @@
-import { StatCard } from "@/components/StatCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Briefcase, Users, DollarSign } from "lucide-react";
-import { StatusChip } from "@/components/StatusChip";
-
-const recentCVs = [
-  { fileName: "CV_FMB 2025.pdf", candidate: "Francesco Vignola", status: "Parsed", variant: "info" as const },
-  { fileName: "Tamim Ahmad CV.pdf", candidate: "Tamim Ahmad", status: "Approved", variant: "success" as const },
-  { fileName: "Holly Ha CV.pdf", candidate: "Holly Ha", status: "Needs review", variant: "warning" as const },
-  { fileName: "Edward Berwin CV.pdf", candidate: "Edward Berwin", status: "Parsed", variant: "info" as const },
-];
-
-const recentMandates = [
-  { name: "ECM - Global Bank - London", firm: "Morgan Stanley", status: "Shortlist", stage: "5 candidates" },
-  { name: "Private Credit - Asset Manager", firm: "KKR", status: "Research", stage: "2 candidates" },
-  { name: "Infrastructure PE Partner", firm: "Brookfield", status: "Interview", stage: "3 candidates" },
-];
+import { Card } from "@/components/ui/card";
+import { TrendingUp, Briefcase, Users, FileText, DollarSign } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export default function Dashboard() {
+  const tiles = [
+    {
+      label: "New CVs this week",
+      value: "8",
+      subtext: "+3 vs last week",
+      icon: FileText,
+      color: "text-secondary",
+    },
+    {
+      label: "Active mandates",
+      value: "12",
+      subtext: "5 in Shortlist, 3 in Interview",
+      icon: Briefcase,
+      color: "text-primary",
+    },
+    {
+      label: "Candidates in process",
+      value: "47",
+      subtext: "Across 12 mandates",
+      icon: Users,
+      color: "text-secondary",
+    },
+    {
+      label: "Invoices due",
+      value: "3",
+      subtext: "Total £260k",
+      icon: DollarSign,
+      color: "text-warning",
+    },
+  ];
+
+  const recentCVs = [
+    { file: "CV_FMB 2025.pdf", candidate: "Francesco Vignola", status: "Parsed" },
+    { file: "Tamim Ahmad CV.pdf", candidate: "Tamim Ahmad", status: "Approved" },
+    { file: "Holly Ha CV.pdf", candidate: "Holly Ha", status: "Needs review" },
+    { file: "Edward Berwin CV.pdf", candidate: "Edward Berwin", status: "Parsed" },
+    { file: "Sarah Chen Resume.pdf", candidate: "Sarah Chen", status: "New" },
+  ];
+
+  const recentMandates = [
+    {
+      name: "ECM – Global Bank – London",
+      firm: "Morgan Stanley",
+      status: "Shortlist",
+      updated: "2 hours ago",
+    },
+    {
+      name: "Private Credit – Asset Manager",
+      firm: "KKR",
+      status: "Research",
+      updated: "5 hours ago",
+    },
+    {
+      name: "Infrastructure PE Partner",
+      firm: "Brookfield",
+      status: "Interview",
+      updated: "1 day ago",
+    },
+    {
+      name: "FIG M&A MD",
+      firm: "Goldman Sachs",
+      status: "Offer",
+      updated: "2 days ago",
+    },
+  ];
+
+  const mandateStages = [
+    { stage: "Research", count: 2, color: "bg-muted" },
+    { stage: "Shortlist", count: 5, color: "bg-info" },
+    { stage: "Interview", count: 3, color: "bg-secondary/20" },
+    { stage: "Offer", count: 2, color: "bg-success/20" },
+  ];
+
+  const teamFees = [
+    { team: "ECM Team", fees: 680000, color: "bg-primary" },
+    { team: "PE Team", fees: 420000, color: "bg-secondary" },
+    { team: "Credit Team", fees: 280000, color: "bg-accent" },
+    { team: "FIG Team", fees: 180000, color: "bg-muted" },
+  ];
+
+  const maxFees = Math.max(...teamFees.map((t) => t.fees));
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "new":
+        return "bg-info text-primary";
+      case "parsed":
+        return "bg-success/20 text-success";
+      case "approved":
+        return "bg-success text-white";
+      case "needs review":
+        return "bg-warning/20 text-warning";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
+  };
+
+  const getMandateStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "research":
+        return "bg-muted text-muted-foreground";
+      case "shortlist":
+        return "bg-info text-primary";
+      case "interview":
+        return "bg-secondary/20 text-secondary";
+      case "offer":
+        return "bg-success/20 text-success";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
+      {/* Page Header */}
       <div>
         <h1 className="text-2xl font-semibold text-foreground mb-1">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">High-level view of your executive search pipeline</p>
+        <p className="text-sm text-muted-foreground">Overview of your executive search operations</p>
       </div>
 
-      {/* Top KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="New CVs this week"
-          value={8}
-          subtext="+3 vs last week"
-          icon={FileText}
-          trend="up"
-        />
-        <StatCard
-          title="Active mandates"
-          value={12}
-          subtext="5 in Shortlist, 3 in Interview"
-          icon={Briefcase}
-        />
-        <StatCard
-          title="Candidates in process"
-          value={47}
-          subtext="Across all active mandates"
-          icon={Users}
-        />
-        <StatCard
-          title="Invoices due"
-          value="£260k"
-          subtext="3 invoices outstanding"
-          icon={DollarSign}
-          trend="neutral"
-        />
+      {/* Top Tiles */}
+      <div className="grid grid-cols-4 gap-4">
+        {tiles.map((tile) => (
+          <Card key={tile.label} className="p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div className={`p-2 rounded-lg bg-muted/50 ${tile.color}`}>
+                <tile.icon className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-3xl font-semibold text-foreground">{tile.value}</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide">{tile.label}</div>
+              <div className="text-xs text-muted-foreground pt-1">{tile.subtext}</div>
+            </div>
+          </Card>
+        ))}
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Mandates by Stage</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                { stage: "Research", count: 2, color: "bg-status-info" },
-                { stage: "Shortlist", count: 5, color: "bg-primary" },
-                { stage: "Interview", count: 3, color: "bg-secondary" },
-                { stage: "Offer", count: 0, color: "bg-status-warning" },
-                { stage: "Placed", count: 2, color: "bg-status-success" },
-              ].map((item) => (
-                <div key={item.stage} className="flex items-center gap-3">
-                  <div className="w-24 text-sm text-muted-foreground">{item.stage}</div>
-                  <div className="flex-1 bg-muted rounded-full h-8 overflow-hidden">
-                    <div
-                      className={`${item.color} h-full flex items-center px-3 text-xs font-medium text-white`}
-                      style={{ width: `${(item.count / 12) * 100}%` }}
-                    >
-                      {item.count > 0 && item.count}
-                    </div>
-                  </div>
-                  <div className="w-12 text-sm text-foreground font-medium text-right">{item.count}</div>
+      <div className="grid grid-cols-2 gap-4">
+        {/* Mandates by Stage */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground">Mandates by Stage</h3>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="space-y-3">
+            {mandateStages.map((item) => (
+              <div key={item.stage}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm text-foreground">{item.stage}</span>
+                  <span className="text-sm font-medium text-foreground">{item.count}</span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className={`h-full ${item.color}`} style={{ width: `${(item.count / 12) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Fees by Team</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                { team: "ECM", fees: "£420k", percentage: 35 },
-                { team: "Private Equity", fees: "£380k", percentage: 32 },
-                { team: "Infrastructure", fees: "£260k", percentage: 22 },
-                { team: "Real Estate", fees: "£140k", percentage: 11 },
-              ].map((item) => (
-                <div key={item.team} className="flex items-center gap-3">
-                  <div className="w-32 text-sm text-muted-foreground">{item.team}</div>
-                  <div className="flex-1 bg-muted rounded-full h-8 overflow-hidden">
-                    <div
-                      className="bg-secondary h-full flex items-center px-3 text-xs font-medium text-white"
-                      style={{ width: `${item.percentage}%` }}
-                    >
-                      {item.fees}
-                    </div>
-                  </div>
-                  <div className="w-16 text-sm text-foreground font-medium text-right">{item.percentage}%</div>
+        {/* Fees by Team */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground">Fees by Team (YTD)</h3>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="space-y-3">
+            {teamFees.map((item) => (
+              <div key={item.team}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm text-foreground">{item.team}</span>
+                  <span className="text-sm font-medium text-foreground">£{(item.fees / 1000).toFixed(0)}k</span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className={`h-full ${item.color}`} style={{ width: `${(item.fees / maxFees) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
       </div>
 
-      {/* Recent Activity Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Recently Ingested CVs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentCVs.map((cv, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border border-border"
-                >
-                  <div className="flex items-center gap-3 flex-1">
-                    <FileText className="h-4 w-4 text-primary" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{cv.fileName}</p>
-                      <p className="text-xs text-muted-foreground">{cv.candidate}</p>
-                    </div>
-                  </div>
-                  <StatusChip status={cv.status} variant={cv.variant} />
+      {/* Lists Section */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Recently Ingested CVs */}
+        <Card className="p-5">
+          <h3 className="font-semibold text-foreground mb-4">Recently Ingested CVs</h3>
+          <div className="space-y-2">
+            {recentCVs.map((cv, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between p-2.5 rounded border border-border hover:bg-muted/50 transition-colors cursor-pointer"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground truncate">{cv.file}</div>
+                  <div className="text-xs text-muted-foreground">{cv.candidate}</div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
+                <Badge className={`ml-2 text-xs ${getStatusColor(cv.status)}`}>{cv.status}</Badge>
+              </div>
+            ))}
+          </div>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Recently Updated Mandates</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentMandates.map((mandate, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border border-border"
-                >
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{mandate.name}</p>
-                    <p className="text-xs text-muted-foreground">{mandate.firm}</p>
-                  </div>
-                  <div className="text-right">
-                    <StatusChip status={mandate.status} variant="info" className="mb-1" />
-                    <p className="text-xs text-muted-foreground">{mandate.stage}</p>
-                  </div>
+        {/* Recently Updated Mandates */}
+        <Card className="p-5">
+          <h3 className="font-semibold text-foreground mb-4">Recently Updated Mandates</h3>
+          <div className="space-y-2">
+            {recentMandates.map((mandate, idx) => (
+              <div
+                key={idx}
+                className="flex items-start justify-between p-2.5 rounded border border-border hover:bg-muted/50 transition-colors cursor-pointer"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground">{mandate.name}</div>
+                  <div className="text-xs text-muted-foreground">{mandate.firm}</div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
+                <div className="ml-2 text-right flex-shrink-0">
+                  <Badge className={`text-xs mb-1 ${getMandateStatusColor(mandate.status)}`}>{mandate.status}</Badge>
+                  <div className="text-xs text-muted-foreground">{mandate.updated}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
       </div>
     </div>

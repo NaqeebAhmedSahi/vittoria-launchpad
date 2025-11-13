@@ -1,70 +1,49 @@
 import {
   LayoutDashboard,
-  Inbox,
+  Upload,
   Users,
   Building2,
   UsersRound,
   Briefcase,
+  HandshakeIcon,
   DollarSign,
   FileText,
   Shield,
   Settings,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
 
 const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Intake", url: "/intake", icon: Inbox },
-  { title: "Candidates", url: "/candidates", icon: Users },
-  { title: "Firms", url: "/firms", icon: Building2 },
-  { title: "Teams", url: "/teams", icon: UsersRound },
-  { title: "Mandates", url: "/mandates", icon: Briefcase },
-  { title: "Deals", url: "/deals", icon: DollarSign },
-  { title: "Finance", url: "/finance", icon: DollarSign },
-  { title: "Templates", url: "/templates", icon: FileText },
-  { title: "Edge Control", url: "/edge-control", icon: Shield },
-  { title: "Settings", url: "/settings", icon: Settings },
+  { name: "Dashboard", path: "/", icon: LayoutDashboard },
+  { name: "Intake", path: "/intake", icon: Upload },
+  { name: "Candidates", path: "/candidates", icon: Users },
+  { name: "Firms", path: "/firms", icon: Building2 },
+  { name: "Teams", path: "/teams", icon: UsersRound },
+  { name: "Mandates", path: "/mandates", icon: Briefcase },
+  { name: "Deals", path: "/deals", icon: HandshakeIcon },
+  { name: "Finance", path: "/finance", icon: DollarSign },
+  { name: "Templates", path: "/templates", icon: FileText },
+  { name: "Edge Control", path: "/edge-control", icon: Shield },
+  { name: "Settings", path: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   return (
-    <Sidebar className="border-r border-sidebar-border">
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-3 py-2">
-            Navigation
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      end={item.url === "/"}
-                      className="flex items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-    </Sidebar>
+    <aside className="w-56 border-r bg-card">
+      <nav className="p-2 space-y-0.5">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            end={item.path === "/"}
+            className="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors"
+            activeClassName="bg-muted text-primary font-medium"
+          >
+            <item.icon className="h-4 w-4" />
+            {item.name}
+          </NavLink>
+        ))}
+      </nav>
+    </aside>
   );
 }

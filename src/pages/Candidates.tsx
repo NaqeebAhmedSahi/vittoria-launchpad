@@ -3,6 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Filter } from "lucide-react";
+import { useState } from "react";
+import { CandidateFormDialog } from "@/components/CandidateFormDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const candidatesData = [
   {
@@ -52,17 +55,55 @@ const candidatesData = [
 ];
 
 export default function Candidates() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [data, setData] = useState(candidatesData);
+  const { toast } = useToast();
+
+  const handleSubmit = (formData: any) => {
+    const newCandidate = {
+      id: data.length + 1,
+      name: formData.name,
+      title: formData.title,
+      firm: formData.firm,
+      location: formData.location,
+      sectors: [],
+      functions: [],
+      mandates: 0,
+      lastUpdated: new Date().toISOString().split('T')[0],
+    };
+    setData([...data, newCandidate]);
+    toast({
+      title: "Candidate created",
+      description: `${formData.name} has been added successfully`,
+    });
+  };
+
+  const filteredData = data.filter(candidate => {
+    if (searchQuery === "") return true;
+    return candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           candidate.firm.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           candidate.title.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground mb-1">Candidates</h1>
-          <p className="text-sm text-muted-foreground">Manage your candidate database</p>
+    <>
+      <CandidateFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSubmit={handleSubmit}
+      />
+      
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground mb-1">Candidates</h1>
+            <p className="text-sm text-muted-foreground">Manage your candidate database</p>
+          </div>
+          <Button className="gap-2" onClick={() => setDialogOpen(true)}>
+            <span>+ New Candidate</span>
+          </Button>
         </div>
-        <Button className="gap-2">
-          <span>+ New Candidate</span>
-        </Button>
-      </div>
 
       <Card>
         <CardContent className="p-0">
@@ -74,6 +115,8 @@ export default function Candidates() {
                 <Input
                   placeholder="Search candidates by name, firm, or skills..."
                   className="pl-9 h-9 text-sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </div>
@@ -113,7 +156,7 @@ export default function Candidates() {
                 </tr>
               </thead>
               <tbody>
-                {candidatesData.map((candidate) => (
+                {filteredData.map((candidate) => (
                   <tr
                     key={candidate.id}
                     className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
@@ -147,5 +190,6 @@ export default function Candidates() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

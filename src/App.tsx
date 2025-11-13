@@ -8,6 +8,13 @@ import Dashboard from "./pages/Dashboard";
 import Intake from "./pages/Intake";
 import Candidates from "./pages/Candidates";
 import Mandates from "./pages/Mandates";
+import Firms from "./pages/Firms";
+import Teams from "./pages/Teams";
+import Deals from "./pages/Deals";
+import Finance from "./pages/Finance";
+import Templates from "./pages/Templates";
+import EdgeControl from "./pages/EdgeControl";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,13 +31,13 @@ const App = () => (
             <Route path="/intake" element={<Intake />} />
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/mandates" element={<Mandates />} />
-            <Route path="/firms" element={<div className="text-center py-12 text-muted-foreground">Firms module coming soon</div>} />
-            <Route path="/teams" element={<div className="text-center py-12 text-muted-foreground">Teams module coming soon</div>} />
-            <Route path="/deals" element={<div className="text-center py-12 text-muted-foreground">Deals module coming soon</div>} />
-            <Route path="/finance" element={<div className="text-center py-12 text-muted-foreground">Finance module coming soon</div>} />
-            <Route path="/templates" element={<div className="text-center py-12 text-muted-foreground">Templates module coming soon</div>} />
-            <Route path="/edge-control" element={<div className="text-center py-12 text-muted-foreground">Edge Control module coming soon</div>} />
-            <Route path="/settings" element={<div className="text-center py-12 text-muted-foreground">Settings module coming soon</div>} />
+            <Route path="/firms" element={<Firms />} />
+            <Route path="/teams" element={<Teams />} />
+            <Route path="/deals" element={<Deals />} />
+            <Route path="/finance" element={<Finance />} />
+            <Route path="/templates" element={<Templates />} />
+            <Route path="/edge-control" element={<EdgeControl />} />
+            <Route path="/settings" element={<Settings />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -7,7 +7,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useState, useRef } from "react";
 import { CandidateFormDialog } from "./CandidateFormDialog";
 import { MandateFormDialog } from "./MandateFormDialog";
@@ -64,8 +63,6 @@ export function TopBar() {
       />
       
       <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4">
-        <SidebarTrigger />
-        
         <div className="font-semibold text-lg text-primary">Vittoria</div>
         
         <div className="flex-1 max-w-md">

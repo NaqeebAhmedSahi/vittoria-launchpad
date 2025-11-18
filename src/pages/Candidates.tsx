@@ -61,10 +61,15 @@ function mapDbCandidateToUi(row: any): UICandidate {
   const location = (row.location || "").toString().trim();
   const firm = (row.current_firm || "").toString().trim();
 
-  const updated =
-    (row.updated_at && row.updated_at.split("T")[0]) ||
-    (row.created_at && row.created_at.split("T")[0]) ||
-    "";
+  const formatDate = (d: any) => {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return "";
+  return date.toISOString().split("T")[0];
+};
+
+const updated = formatDate(row.updated_at) || formatDate(row.created_at);
+
 
   // Parse mandate_ids array to get count of active mandates
   const mandateIds = Array.isArray(row.mandate_ids)
@@ -112,6 +117,8 @@ export default function Candidates() {
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(
     null
   );
+  const [candidateMandates, setCandidateMandates] = useState<any[]>([]);
+  const [loadingMandates, setLoadingMandates] = useState(false);
   const selectedCandidateData = data.find(
     (c) => c.id === selectedCandidate
   );
@@ -146,6 +153,45 @@ export default function Candidates() {
     loadCandidates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load mandates for selected candidate
+  useEffect(() => {
+    if (!selectedCandidate || !api?.candidate?.getMandates) {
+      setCandidateMandates([]);
+      return;
+    }
+
+    const loadMandates = async () => {
+      setLoadingMandates(true);
+      try {
+        const response = await api.candidate.getMandates(selectedCandidate);
+        if (response.success && response.mandateIds && response.mandateIds.length > 0) {
+          // Load full mandate details
+          const mandateDetails = await Promise.all(
+            response.mandateIds.map(async (mandateId: number) => {
+              try {
+                const mandateResponse = await api.mandate.getById(mandateId);
+                return mandateResponse.success ? mandateResponse.mandate : null;
+              } catch (err) {
+                console.error(`Failed to load mandate ${mandateId}:`, err);
+                return null;
+              }
+            })
+          );
+          setCandidateMandates(mandateDetails.filter(Boolean));
+        } else {
+          setCandidateMandates([]);
+        }
+      } catch (err) {
+        console.error("Failed to load candidate mandates:", err);
+        setCandidateMandates([]);
+      } finally {
+        setLoadingMandates(false);
+      }
+    };
+
+    loadMandates();
+  }, [selectedCandidate, api]);
 
   // Create candidate in DB via IPC
   const handleSubmit = async (formData: any) => {
@@ -502,6 +548,50 @@ export default function Candidates() {
                     </div>
                   </div>
                 </div>
+
+                {/* Mandates List */}
+                {selectedCandidateData.mandates > 0 && (
+                  <div className="border-t pt-4">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                      Associated Mandates
+                    </div>
+                    {loadingMandates ? (
+                      <div className="text-sm text-muted-foreground">Loading mandates...</div>
+                    ) : candidateMandates.length > 0 ? (
+                      <div className="space-y-2">
+                        {candidateMandates.map((mandate: any) => (
+                          <div key={mandate.id} className="p-3 rounded-lg bg-muted/50 space-y-1">
+                            <div className="font-medium text-sm">{mandate.name}</div>
+                            <div className="flex flex-wrap gap-1">
+                              {mandate.primary_sector && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {mandate.primary_sector}
+                                </Badge>
+                              )}
+                              {mandate.location && (
+                                <Badge variant="outline" className="text-xs">
+                                  {mandate.location}
+                                </Badge>
+                              )}
+                              <Badge 
+                                variant={
+                                  mandate.status === 'OPEN' ? 'default' : 
+                                  mandate.status === 'CLOSED' ? 'secondary' : 
+                                  'outline'
+                                }
+                                className="text-xs"
+                              >
+                                {mandate.status}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No mandate details available</div>
+                    )}
+                  </div>
+                )}
 
                 <div className="border-t pt-4">
                   <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">

@@ -57,6 +57,13 @@ const statusFilters = [
 ];
 
 function mapDbRowToItem(row: IntakeDbRow): IntakeItem {
+  // Format date properly - PostgreSQL returns Date objects
+  let uploadedAtStr = "";
+  if (row.uploaded_at) {
+    const date = new Date(row.uploaded_at);
+    uploadedAtStr = date.toLocaleString();
+  }
+  
   return {
     id: row.id,
     fileName: row.file_name,
@@ -64,7 +71,7 @@ function mapDbRowToItem(row: IntakeDbRow): IntakeItem {
     type: row.type ?? "PDF",
     source: row.source ?? "",
     uploadedBy: row.uploaded_by ?? "",
-    uploadedAt: row.uploaded_at ?? "",
+    uploadedAt: uploadedAtStr,
     status: row.status ?? "New",
     variant: (row.variant || "info") as IntakeItem["variant"],
     qualityScore: row.quality_score,

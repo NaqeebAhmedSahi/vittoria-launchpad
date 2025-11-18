@@ -18,6 +18,7 @@ import EdgeControl from "./pages/EdgeControl";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import SignIn from "./pages/SignIn";
+import Setup from "./pages/Setup";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,34 @@ const App = () => {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+
+  // Check if setup is completed on mount (BEFORE auth check)
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        console.log('[App] Checking if setup is completed...');
+        const result = await window.api.setup.isCompleted();
+        console.log('[App] Setup check result:', result);
+        
+        if (!result.completed) {
+          console.log('[App] Setup not completed, showing setup wizard');
+          setSetupNeeded(true);
+        } else {
+          console.log('[App] Setup already completed');
+        }
+      } catch (error) {
+        console.error('[App] Error checking setup:', error);
+        // If there's an error checking setup, assume it's needed
+        setSetupNeeded(true);
+      } finally {
+        setIsCheckingSetup(false);
+      }
+    };
+
+    checkSetup();
+  }, []);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -76,6 +105,38 @@ const App = () => {
     setCurrentUser(null);
     setIsAuthenticated(false);
   };
+
+  const handleSetupComplete = () => {
+    console.log('[App] Setup completed, reloading application...');
+    setSetupNeeded(false);
+    // Reload to reinitialize with PostgreSQL
+    window.location.reload();
+  };
+
+  // Show loading spinner while checking setup
+  if (isCheckingSetup) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Initializing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show setup wizard if setup is not completed
+  if (setupNeeded) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Setup onComplete={handleSetupComplete} />
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+  }
 
   // Show loading spinner while checking auth
   if (isCheckingAuth) {

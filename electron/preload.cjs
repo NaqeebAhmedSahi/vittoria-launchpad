@@ -3,6 +3,53 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("api", {
   ping: () => "pong",
+
+    // 🔹 Setup / PostgreSQL configuration
+  setup: {
+    // Check if full app setup is completed (based on settings)
+    isCompleted: () => ipcRenderer.invoke("setup:isCompleted"),
+
+    // Detect if PostgreSQL is installed on the system
+    checkPostgres: () => ipcRenderer.invoke("setup:checkPostgres"),
+
+    // Get platform-specific installation instructions (Windows / macOS / Linux)
+    getInstructions: () => ipcRenderer.invoke("setup:getInstructions"),
+
+    // Test connection to PostgreSQL with provided credentials
+    testConnection: (credentials) =>
+      ipcRenderer.invoke("setup:testConnection", credentials),
+
+    // Create a new PostgreSQL user (using superuser credentials)
+    createUser: (params) =>
+      ipcRenderer.invoke("setup:createUser", params),
+
+    // Generate SQL script for manual user creation
+    generateUserScript: (params) =>
+      ipcRenderer.invoke("setup:generateUserScript", params),
+
+    // Create the Vittoria DB (vittoria_launchpad by default)
+    createDatabase: (config) =>
+      ipcRenderer.invoke("setup:createDatabase", config),
+
+    // Initialize schema (tables, indexes, triggers, default settings)
+    initializeSchema: (config) =>
+      ipcRenderer.invoke("setup:initializeSchema", config),
+
+    // Save DB config (host, port, db_name, username, password) in settings
+    saveConfig: (config) =>
+      ipcRenderer.invoke("setup:saveConfig", config),
+
+    // Mark setup as complete
+    complete: () => ipcRenderer.invoke("setup:complete"),
+    
+    // List all databases in PostgreSQL
+    listDatabases: (credentials) => 
+      ipcRenderer.invoke("setup:listDatabases", credentials),
+    
+    // Check database schema (list tables and row counts)
+    checkDatabaseSchema: (config) =>
+      ipcRenderer.invoke("setup:checkDatabaseSchema", config),
+  },
   intake: {
     list: () => ipcRenderer.invoke("intake:list"),
     addFiles: (files) => ipcRenderer.invoke("intake:addFiles", files),

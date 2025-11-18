@@ -339,7 +339,7 @@ export function MandateFormDialog({
           </div>
 
           {/* Row 6: Scope / Notes */}
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             <Label htmlFor="raw_brief">Scope & Notes</Label>
             <Textarea
               id="raw_brief"
@@ -348,7 +348,7 @@ export function MandateFormDialog({
               rows={4}
               placeholder="Paste client brief, internal notes, nuances, etc."
             />
-          </div>
+          </div> */}
 
           <DialogFooter>
             <Button

@@ -88,6 +88,80 @@ declare global {
   interface Window {
     api: {
       ping: () => string;
+      setup: {
+        isCompleted(): Promise<{ success: boolean; completed: boolean }>;
+        checkPostgres(): Promise<{ success: boolean; installed: boolean; version?: string; error?: string }>;
+        getInstructions(): Promise<{ success: boolean; instructions: string }>;
+        testConnection(credentials: {
+          host: string;
+          port: string;
+          username: string;
+          password: string;
+          dbName: string;
+        }): Promise<{ success: boolean; message?: string; error?: string }>;
+        createUser(params: {
+          superuser: {
+            host: string;
+            port: string;
+            username: string;
+            password: string;
+          };
+          newUser: {
+            username: string;
+            password: string;
+          };
+        }): Promise<{ success: boolean; message?: string; error?: string; code?: string }>;
+        generateUserScript(params: {
+          newUser: {
+            username: string;
+            password: string;
+          };
+        }): Promise<{ success: boolean; script?: string; error?: string }>;
+        createDatabase(config: {
+          host: string;
+          port: string;
+          username: string;
+          password: string;
+          dbName: string;
+        }): Promise<{ success: boolean; message?: string; error?: string }>;
+        initializeSchema(config: {
+          host: string;
+          port: string;
+          username: string;
+          password: string;
+          dbName: string;
+        }): Promise<{ success: boolean; message?: string; error?: string }>;
+        saveConfig(config: {
+          host: string;
+          port: string;
+          username: string;
+          password: string;
+          dbName: string;
+        }): Promise<{ success: boolean; message?: string }>;
+        complete(): Promise<{ success: boolean; message?: string }>;
+        listDatabases(credentials: {
+          host: string;
+          port: number;
+          username: string;
+          password: string;
+        }): Promise<{ 
+          success: boolean; 
+          databases?: Array<{ name: string; size: string; collation: string }>; 
+          error?: string;
+        }>;
+        checkDatabaseSchema(config: {
+          host: string;
+          port: number;
+          username: string;
+          password: string;
+          dbName: string;
+        }): Promise<{
+          success: boolean;
+          database?: string;
+          tables?: Array<{ name: string; size: string; rows: number }>;
+          error?: string;
+        }>;
+      };
       intake: {
         list(): Promise<IntakeDbRow[]>;
         addFiles(files: IntakeFileInput[]): Promise<IntakeDbRow[]>;
@@ -109,6 +183,9 @@ declare global {
           reject(candidateId: number): Promise<void>;
           search(searchTerm: string): Promise<Candidate[]>;
           delete(candidateId: number): Promise<void>;
+          addMandate(candidateId: number, mandateId: number): Promise<{ success: boolean; mandateIds?: number[]; error?: string }>;
+          removeMandate(candidateId: number, mandateId: number): Promise<{ success: boolean; mandateIds?: number[]; error?: string }>;
+          getMandates(candidateId: number): Promise<{ success: boolean; mandateIds?: number[]; error?: string }>;
       };
       settings: {
         getSetting(key: string): Promise<any>;
@@ -162,6 +239,9 @@ declare global {
         create(mandateData: Partial<Mandate>): Promise<{ success: boolean; mandateId?: number; error?: string }>;
         update(mandateId: number, updates: Partial<Mandate>): Promise<{ success: boolean; error?: string }>;
         delete(mandateId: number): Promise<{ success: boolean; error?: string }>;
+        addCandidate(payload: { mandateId: number; candidateId: number }): Promise<{ success: boolean; candidateIds?: number[]; error?: string }>;
+        removeCandidate(payload: { mandateId: number; candidateId: number }): Promise<{ success: boolean; candidateIds?: number[]; error?: string }>;
+        getCandidates(mandateId: number): Promise<{ success: boolean; candidateIds?: number[]; error?: string }>;
       };
       scoring: {
         runFitAgainstMandate(candidateId: number, mandateId: number): Promise<{ success: boolean; result?: any; error?: string }>;

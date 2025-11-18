@@ -1,0 +1,12 @@
+{
+  "cv_quality": {
+    "weights": {
+      "completeness": 0.4,
+      "experience": 0.4,
+      "education": 0.1,
+      "parser_confidence": 0.1
+    },
+    "good_threshold": 0.75,
+    "borderline_threshold": 0.50
+  }
+}

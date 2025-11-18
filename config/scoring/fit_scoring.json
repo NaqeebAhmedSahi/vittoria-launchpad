@@ -1,0 +1,9 @@
+{
+  "weights": {
+    "sector": 0.40,
+    "function": 0.25,
+    "assetClass": 0.15,
+    "geography": 0.10,
+    "seniority": 0.10
+  }
+}

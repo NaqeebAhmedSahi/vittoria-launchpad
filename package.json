@@ -18,6 +18,7 @@
     "postinstall": "electron-builder install-app-deps",
     "electron:dev": "cross-env NODE_ENV=development concurrently -k \"npm:dev\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",
+    "reset:setup": "node scripts/reset-setup.cjs",
     "electron:build:win": "npm run build && electron-builder --win --x64",
     "electron:build:mac": "npm run build && electron-builder --mac",
     "electron:build:linux": "npm run build && electron-builder --linux",

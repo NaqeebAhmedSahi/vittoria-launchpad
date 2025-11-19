@@ -4,6 +4,20 @@
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const fs = require('fs');
+const path = require('path');
+
+// Extract a sensible version string from command output (stdout or stderr)
+function extractVersion(output) {
+  if (!output) return null;
+  const text = String(output);
+  // Common patterns like: "psql (PostgreSQL) 16.11" or "PostgreSQL 16.11"
+  let m = text.match(/PostgreSQL\)?\s*([0-9]+(?:\.[0-9]+)*)/i);
+  if (m && m[1]) return m[1];
+  // Fallback: first version-like token
+  m = text.match(/([0-9]+\.[0-9]+(?:\.[0-9]+)?)/);
+  return m ? m[1] : null;
+}
 
 /**
  * Detect if PostgreSQL is installed on the system
@@ -23,26 +37,89 @@ async function checkPostgresInstalled() {
   try {
     // Method 1: Check psql command
     try {
-      const { stdout } = await execAsync('psql --version', { timeout: 5000 });
-      const versionMatch = stdout.match(/PostgreSQL\s+([\d.]+)/i);
-      if (versionMatch) {
+      const { stdout, stderr } = await execAsync('psql --version', { timeout: 5000 });
+      const combined = `${stdout || ''}\n${stderr || ''}`;
+      const version = extractVersion(combined);
+      if (version) {
         checks.installed = true;
-        checks.version = versionMatch[1];
+        checks.version = version;
         checks.methods.push('psql-command');
         console.log(`[postgresChecker] ✓ Found via psql: PostgreSQL ${checks.version}`);
+      } else {
+        console.log('[postgresChecker] psql present but no version parsed');
       }
     } catch (err) {
-      console.log('[postgresChecker] psql command not found');
+      console.log('[postgresChecker] psql command not found or failed to run');
+    }
+
+    // Additional fallback on Windows: use `where psql` to locate executables and try them
+    if (!checks.installed && process.platform === 'win32') {
+      try {
+        const whereResult = await execAsync('where psql', { timeout: 4000 });
+        const candidates = String(whereResult.stdout || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        for (const candidate of candidates) {
+          try {
+            const { stdout, stderr } = await execAsync(`"${candidate}" --version`, { timeout: 3000 });
+            const version = extractVersion(`${stdout || ''}\n${stderr || ''}`);
+            if (version) {
+              checks.installed = true;
+              checks.version = version;
+              checks.path = candidate;
+              checks.methods.push('where-exec');
+              console.log(`[postgresChecker] ✓ Found via where-exec: PostgreSQL ${checks.version} at ${checks.path}`);
+              break;
+            }
+          } catch (e) {
+            // try next candidate
+          }
+        }
+      } catch (e) {
+        // where may not find anything or fail; continue to other checks
+      }
+    }
+
+    // If psql wasn't found via direct exec, try scanning PATH entries for psql.exe
+    if (!checks.installed && process.platform === 'win32') {
+      try {
+        const pathEnv = process.env.PATH || process.env.Path || '';
+        console.log('[postgresChecker] PATH length:', (pathEnv || '').length);
+        const parts = pathEnv.split(';').filter(Boolean);
+        for (const part of parts) {
+          try {
+            const candidate = path.join(part, 'psql.exe');
+            if (fs.existsSync(candidate)) {
+              try {
+                const { stdout, stderr } = await execAsync(`"${candidate}" --version`, { timeout: 3000 });
+                const version = extractVersion(`${stdout || ''}\n${stderr || ''}`);
+                if (version) {
+                  checks.installed = true;
+                  checks.version = version;
+                  checks.path = candidate;
+                  checks.methods.push('path-scan');
+                  console.log(`[postgresChecker] ✓ Found via PATH scan: PostgreSQL ${checks.version} at ${checks.path}`);
+                  break;
+                }
+              } catch (err) {
+                // ignore
+              }
+            }
+          } catch (e) {
+            // ignore malformed path entries
+          }
+        }
+      } catch (e) {
+        console.log('[postgresChecker] Error scanning PATH for psql:', e && e.message);
+      }
     }
 
     // Method 2: Check postgres command
     if (!checks.installed) {
       try {
-        const { stdout } = await execAsync('postgres --version', { timeout: 5000 });
-        const versionMatch = stdout.match(/postgres\s+\(PostgreSQL\)\s+([\d.]+)/i);
-        if (versionMatch) {
+        const { stdout, stderr } = await execAsync('postgres --version', { timeout: 5000 });
+        const version = extractVersion(`${stdout || ''}\n${stderr || ''}`);
+        if (version) {
           checks.installed = true;
-          checks.version = versionMatch[1];
+          checks.version = version;
           checks.methods.push('postgres-command');
           console.log(`[postgresChecker] ✓ Found via postgres: PostgreSQL ${checks.version}`);
         }
@@ -56,12 +133,53 @@ async function checkPostgresInstalled() {
       if (process.platform === 'win32') {
         // Windows: Check common installation paths
         try {
-          const { stdout } = await execAsync('where psql', { timeout: 5000 });
-          if (stdout.trim()) {
-            checks.installed = true;
-            checks.path = stdout.trim().split('\n')[0];
-            checks.methods.push('windows-where');
-            console.log(`[postgresChecker] ✓ Found via where: ${checks.path}`);
+          // First try `where` which checks PATH
+          try {
+            const { stdout } = await execAsync('where psql', { timeout: 5000 });
+            if (stdout && stdout.trim()) {
+              checks.installed = true;
+              checks.path = stdout.trim().split('\n')[0];
+              checks.methods.push('windows-where');
+              console.log(`[postgresChecker] ✓ Found via where: ${checks.path}`);
+            }
+          } catch (e) {
+            console.log('[postgresChecker] where psql failed or not found in PATH');
+          }
+
+          // If not found in PATH, check common Program Files installation folders (non-recursive top-level)
+          if (!checks.installed) {
+            const possibleRoots = [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.PROGRAMW6432, 'C:\\Program Files\\PostgreSQL'];
+            const versionsToCheck = ['17','16','15','14','13','12','11','10','9.6','9.5'];
+
+            for (const root of possibleRoots) {
+              if (!root) continue;
+              // ensure base points to a folder that contains Postgres installs
+              let base = root;
+              if (!base.toLowerCase().includes('postgres')) {
+                base = path.join(base, 'PostgreSQL');
+              }
+
+              for (const ver of versionsToCheck) {
+                const candidate = path.join(base, ver, 'bin', 'psql.exe');
+                try {
+                  if (!fs.existsSync(candidate)) continue;
+                  // attempt to run psql --version from the candidate path
+                  const { stdout, stderr } = await execAsync(`"${candidate}" --version`, { timeout: 3000 });
+                  const version = extractVersion(`${stdout || ''}\n${stderr || ''}`);
+                  if (version) {
+                    checks.installed = true;
+                    checks.version = version;
+                    checks.path = candidate;
+                    checks.methods.push('program-files-scan');
+                    console.log(`[postgresChecker] ✓ Found via Program Files: PostgreSQL ${checks.version} at ${checks.path}`);
+                    break;
+                  }
+                } catch (err) {
+                  // candidate not present or failed; continue
+                }
+              }
+              if (checks.installed) break;
+            }
           }
         } catch (err) {
           console.log('[postgresChecker] Windows where check failed');

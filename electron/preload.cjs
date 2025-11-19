@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld("api", {
     // Create a new PostgreSQL user (using superuser credentials)
     createUser: (params) =>
       ipcRenderer.invoke("setup:createUser", params),
+    // Create a new PostgreSQL user on Windows using elevated helper (UAC flow)
+    createUserWindows: (params) =>
+      ipcRenderer.invoke("setup:createUserWindows", params),
 
     // Generate SQL script for manual user creation
     generateUserScript: (params) =>

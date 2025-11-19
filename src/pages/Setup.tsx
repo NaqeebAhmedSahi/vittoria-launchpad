@@ -12,7 +12,7 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
     const [currentStep, setCurrentStep] = useState<SetupStep>('checking');
     const [postgresInstalled, setPostgresInstalled] = useState(false);
     const [checkingPostgres, setCheckingPostgres] = useState(false);
-    const [instructions, setInstructions] = useState('');
+    const [instructions, setInstructions] = useState<string | any>('');
 
     const [credentials, setCredentials] = useState({
         host: 'localhost',
@@ -34,6 +34,8 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
 
     const [testing, setTesting] = useState(false);
     const [creatingUser, setCreatingUser] = useState(false);
+    const [winCreating, setWinCreating] = useState(false);
+    const [winLogs, setWinLogs] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [authError, setAuthError] = useState<string | null>(null);
@@ -231,6 +233,42 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
         }
     };
 
+    const createUserWindows = async () => {
+        console.log('[Setup] createUserWindows called for', newUser.username);
+
+        if (newUser.password !== newUser.confirmPassword) {
+            setError('Passwords do not match');
+            return;
+        }
+
+        setWinCreating(true);
+        setWinLogs(null);
+        setError(null);
+
+        try {
+            const result = await api.setup.createUserWindows({ newUser: { username: newUser.username, password: newUser.password }, serviceName: '' });
+            console.log('[Setup] createUserWindows result:', result);
+
+            if (result.success) {
+                toast({ title: 'User Created', description: `User ${newUser.username} created (or already existed).` });
+                // Update credentials to use the new user
+                setCredentials({ ...credentials, username: newUser.username, password: newUser.password });
+                setCurrentStep('credentials');
+                setAuthError(null);
+                setSuperuserPassword('');
+            } else {
+                setError(result.message || result.error || 'Failed to create user on Windows');
+            }
+
+            if (result.logs) setWinLogs(result.logs);
+        } catch (err: any) {
+            console.error('[Setup] createUserWindows error:', err);
+            setError(err.message || 'Failed to create user on Windows');
+        } finally {
+            setWinCreating(false);
+        }
+    };
+
 
     const generateManualScript = async () => {
         console.log('[Setup] Generating manual user creation script');
@@ -386,7 +424,29 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
 
                                     <div className="bg-muted p-4 rounded-lg">
                                         <h3 className="font-semibold mb-2">Installation Instructions:</h3>
-                                        <pre className="text-sm whitespace-pre-wrap">{instructions}</pre>
+                                        <div className="text-sm">
+                                            {typeof instructions === 'string' ? (
+                                                <pre className="whitespace-pre-wrap">{instructions}</pre>
+                                            ) : instructions && typeof instructions === 'object' ? (
+                                                <div>
+                                                    {instructions.title && <div className="font-medium mb-2">{instructions.title}</div>}
+                                                    {Array.isArray(instructions.steps) && (
+                                                        <ol className="list-decimal list-inside mb-2">
+                                                            {instructions.steps.map((s: string, i: number) => (
+                                                                <li key={i} className="text-sm">{s}</li>
+                                                            ))}
+                                                        </ol>
+                                                    )}
+                                                    {instructions.downloadUrl && (
+                                                        <div className="text-sm">
+                                                            <a href={instructions.downloadUrl} target="_blank" rel="noreferrer" className="underline text-primary">Download instructions / installer</a>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="text-sm">No instructions available.</div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     <Button onClick={checkPostgresInstallation} className="w-full">
@@ -667,6 +727,24 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
                                     </Button>
 
                                     <Button
+                                        onClick={createUserWindows}
+                                        disabled={winCreating || !newUser.username || !newUser.password || !newUser.confirmPassword}
+                                        variant="secondary"
+                                    >
+                                        {winCreating ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Creating on Windows...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <UserPlus className="mr-2 h-4 w-4" />
+                                                Create on Windows (UAC)
+                                            </>
+                                        )}
+                                    </Button>
+
+                                    <Button
                                         onClick={generateManualScript}
                                         disabled={!newUser.username || !newUser.password || !newUser.confirmPassword || !!manualScript}
                                         variant="outline"
@@ -675,6 +753,15 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
                                         Generate Manual Command
                                     </Button>
                                 </div>
+
+                                {winLogs && (
+                                    <div className="mt-3">
+                                        <h5 className="font-medium text-sm">Windows Helper Logs</h5>
+                                        <div className="bg-black text-green-400 p-3 rounded font-mono text-xs overflow-x-auto mt-2">
+                                            <pre>{winLogs}</pre>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <Button
                                     onClick={() => {

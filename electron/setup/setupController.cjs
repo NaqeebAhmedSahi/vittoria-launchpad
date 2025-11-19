@@ -7,6 +7,7 @@ const { createDatabase, initializeSchema } = require('./databaseInitializer.cjs'
 const { getSetting, setSetting } = require('../models/settingsModel.cjs');
 const fs = require('fs');
 const path = require('path');
+const child_process = require('child_process');
 const { app } = require('electron');
 
 /**
@@ -195,6 +196,15 @@ function registerSetupIpcHandlers() {
       await client.connect();
       console.log('[setupController] Connected as superuser');
 
+      // Helpers to safely quote identifiers and literals for DDL statements
+      function escapeIdentifier(id) {
+        return '"' + String(id).replace(/"/g, '""') + '"';
+      }
+
+      function escapeLiteral(val) {
+        return "'" + String(val).replace(/'/g, "''") + "'";
+      }
+
       try {
         // Check if user already exists
         const userCheck = await client.query(
@@ -205,17 +215,13 @@ function registerSetupIpcHandlers() {
         if (userCheck.rows.length > 0) {
           // User exists, update password
           console.log('[setupController] User exists, updating password');
-          await client.query(
-            `ALTER USER "${newUser.username}" WITH PASSWORD $1`,
-            [newUser.password]
-          );
+          const alterSql = `ALTER USER ${escapeIdentifier(newUser.username)} WITH PASSWORD ${escapeLiteral(newUser.password)}`;
+          await client.query(alterSql);
         } else {
           // Create new user with CREATEDB privilege
           console.log('[setupController] Creating new user');
-          await client.query(
-            `CREATE USER "${newUser.username}" WITH PASSWORD $1 CREATEDB`,
-            [newUser.password]
-          );
+          const createSql = `CREATE USER ${escapeIdentifier(newUser.username)} WITH PASSWORD ${escapeLiteral(newUser.password)} CREATEDB`;
+          await client.query(createSql);
         }
 
         await client.end();
@@ -241,11 +247,87 @@ function registerSetupIpcHandlers() {
   });
 
   /**
+   * Create PostgreSQL user on Windows using elevated helper (automated UAC flow)
+   * This will prompt the OS for elevation and attempt to temporarily set trust
+   * on loopback addresses to create the user, then restore the config.
+   */
+  ipcMain.handle('setup:createUserWindows', async (_event, { newUser, serviceName }) => {
+    if (process.platform !== 'win32') {
+      return { success: false, error: 'This handler is only for Windows' };
+    }
+
+    try {
+      const helperPath = path.join(__dirname, 'windowsPostgresHelper.cjs');
+      const node = process.execPath;
+
+      // Spawn the helper and capture stdout/stderr so we can return logs to the renderer
+      const proc = child_process.spawn(node, [helperPath, newUser.username, newUser.password, serviceName || ''], {
+        windowsHide: false,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout && proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+      proc.stderr && proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+      const os = require('os');
+
+      return await new Promise((resolve) => {
+        proc.on('close', async (code) => {
+          const combined = (stdout || '') + (stderr ? '\nERRORS:\n' + stderr : '');
+
+          // Try to find the helper log file in temp folder and include its contents for better diagnostics
+          let logContent = '';
+          try {
+            const tmp = os.tmpdir();
+            const files = fs.readdirSync(tmp).filter(f => f.startsWith('vittoria_create_user_') && f.endsWith('.log'));
+            if (files.length > 0) {
+              // choose newest
+              const newest = files.map(f => ({ f, t: fs.statSync(path.join(tmp, f)).mtimeMs })).sort((a,b)=>b.t-a.t)[0].f;
+              logContent = fs.readFileSync(path.join(tmp, newest), 'utf8');
+            }
+          } catch (e) {
+            logContent = combined; // fallback to captured stdout/stderr
+          }
+
+          const result = (code === 0) ? { success: true, message: 'User created (or already exists).', logs: logContent || combined } : { success: false, code, message: 'Helper exited with non-zero code', logs: logContent || combined };
+          resolve(result);
+        });
+        proc.on('error', (err) => {
+          resolve({ success: false, error: err.message });
+        });
+      });
+    } catch (error) {
+      console.error('[setupController] Error creating user on Windows:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  /**
    * Generate SQL script for creating user manually
    */
   ipcMain.handle('setup:generateUserScript', async (_event, { newUser }) => {
     try {
-      const script = `-- Run this command in your terminal to create the PostgreSQL user
+      // Provide platform-specific script/instructions
+      const platform = process.platform;
+      let script;
+
+      if (platform === 'win32') {
+        script = `-- Windows (PowerShell/CMD) instructions to create PostgreSQL user
+-- Open "SQL Shell (psql)" or run psql from the PostgreSQL bin directory.
+-- Example (from an elevated Command Prompt or PowerShell where psql is in PATH):
+psql -U postgres -c "CREATE USER ${newUser.username} WITH PASSWORD '${newUser.password}';"
+
+-- If you need CREATEDB privilege as well:
+psql -U postgres -c "CREATE USER ${newUser.username} WITH PASSWORD '${newUser.password}' CREATEDB;"
+
+-- Alternatively, open psql interactively and run the CREATE USER command.
+`;
+      } else {
+        // Unix-like platforms (Linux / macOS)
+        script = `-- Run this command in your terminal to create the PostgreSQL user
 -- Copy and paste this into your terminal:
 
 sudo -u postgres psql -c "CREATE USER ${newUser.username} WITH PASSWORD '${newUser.password}' CREATEDB;"
@@ -255,11 +337,9 @@ sudo -u postgres psql -c "CREATE USER ${newUser.username} WITH PASSWORD '${newUs
 -- 2. CREATE USER ${newUser.username} WITH PASSWORD '${newUser.password}' CREATEDB;
 -- 3. \\q
 `;
+      }
 
-      return {
-        success: true,
-        script
-      };
+      return { success: true, script };
     } catch (error) {
       console.error('[setupController] Error generating script:', error);
       return {

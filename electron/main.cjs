@@ -39,31 +39,29 @@ app.whenReady().then(async () => {
   // Initialize PostgreSQL connection with stored credentials (if they exist)
   console.log('[main.cjs] Step 0: Initializing PostgreSQL connection...');
   try {
-    const { setCredentials, hasCredentials } = require('./db/pgConnection.cjs');
-    const { getSetting } = require('./models/settingsModel.cjs');
+    const { setCredentials } = require('./db/pgConnection.cjs');
+    const fs = require('fs');
+    const path = require('path');
     
-    // Try to load credentials - this will work if PostgreSQL is already set up
-    try {
-      const dbHost = await getSetting('db_host');
-      const dbPort = await getSetting('db_port');
-      const dbName = await getSetting('db_name');
-      const dbUsername = await getSetting('db_username');
-      const dbPassword = await getSetting('db_password');
-      
-      if (dbHost && dbPort && dbName && dbUsername && dbPassword) {
-        setCredentials({
-          host: dbHost,
-          port: dbPort,
-          database: dbName,
-          username: dbUsername,
-          password: dbPassword
-        });
-        console.log('[main.cjs] PostgreSQL credentials loaded successfully');
-      } else {
-        console.log('[main.cjs] PostgreSQL credentials not found - setup will be required');
+    // Try to load credentials from local file
+    const credentialsPath = path.join(app.getPath('userData'), 'pg-credentials.json');
+    
+    if (fs.existsSync(credentialsPath)) {
+      try {
+        const data = fs.readFileSync(credentialsPath, 'utf8');
+        const credentials = JSON.parse(data);
+        
+        if (credentials.host && credentials.database && credentials.username) {
+          setCredentials(credentials);
+          console.log('[main.cjs] PostgreSQL credentials loaded from local file');
+        } else {
+          console.log('[main.cjs] Invalid credentials file - setup will be required');
+        }
+      } catch (error) {
+        console.log('[main.cjs] Error reading credentials file:', error.message);
       }
-    } catch (error) {
-      console.log('[main.cjs] Could not load PostgreSQL credentials (setup required):', error.message);
+    } else {
+      console.log('[main.cjs] No credentials file found - setup will be required');
     }
   } catch (error) {
     console.error('[main.cjs] Error initializing PostgreSQL:', error);

@@ -5,13 +5,52 @@ const { ipcMain } = require('electron');
 const { checkPostgresInstalled, testConnection, getInstallationInstructions } = require('./postgresChecker.cjs');
 const { createDatabase, initializeSchema } = require('./databaseInitializer.cjs');
 const { getSetting, setSetting } = require('../models/settingsModel.cjs');
+const fs = require('fs');
+const path = require('path');
+const { app } = require('electron');
+
+/**
+ * Get path to local credentials file
+ */
+function getCredentialsFilePath() {
+  return path.join(app.getPath('userData'), 'pg-credentials.json');
+}
+
+/**
+ * Load credentials from local file
+ */
+function loadLocalCredentials() {
+  const filePath = getCredentialsFilePath();
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('[setupController] Error reading credentials file:', error.message);
+  }
+  return null;
+}
+
+/**
+ * Save credentials to local file
+ */
+function saveLocalCredentials(credentials) {
+  const filePath = getCredentialsFilePath();
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(credentials, null, 2), 'utf8');
+    console.log('[setupController] Credentials saved to local file');
+  } catch (error) {
+    console.error('[setupController] Error saving credentials file:', error.message);
+    throw error;
+  }
+}
 
 function registerSetupIpcHandlers() {
   console.log('[setupController] Registering setup IPC handlers...');
   
   /**
-   * Check if setup has been completed by verifying PostgreSQL connection
-   * Instead of using SQLite flag, we check if we can connect to PostgreSQL
+   * Check if setup has been completed by checking local credentials file
    */
   ipcMain.handle('setup:isCompleted', async () => {
     console.log('[setupController] setup:isCompleted called');
@@ -19,52 +58,35 @@ function registerSetupIpcHandlers() {
       const { Client } = require('pg');
       const { setCredentials } = require('../db/pgConnection.cjs');
       
-      // Try to get stored PostgreSQL credentials from settings
-      // First we need to check if we have a settings table at all
-      let dbHost, dbPort, dbName, dbUsername, dbPassword;
+      // Try to load credentials from local file
+      const credentials = loadLocalCredentials();
       
-      try {
-        dbHost = await getSetting('db_host');
-        dbPort = await getSetting('db_port');
-        dbName = await getSetting('db_name');
-        dbUsername = await getSetting('db_username');
-        dbPassword = await getSetting('db_password');
-      } catch (error) {
-        // If getSetting fails, it means PostgreSQL isn't set up yet
-        console.log('[setupController] No credentials found - setup not complete');
+      if (!credentials || !credentials.host || !credentials.database || !credentials.username) {
+        console.log('[setupController] No credentials file found - setup not complete');
         return {
           success: true,
           completed: false
         };
       }
       
-      // If no credentials stored, setup is not complete
-      if (!dbHost || !dbPort || !dbName || !dbUsername || !dbPassword) {
-        console.log('[setupController] No PostgreSQL credentials found - setup not complete');
-        return {
-          success: true,
-          completed: false
-        };
-      }
-      
-      console.log('[setupController] Found credentials, setting them and testing connection...');
+      console.log('[setupController] Found credentials file, setting and testing connection...');
       
       // Set credentials for pgConnection
       setCredentials({
-        host: dbHost,
-        port: dbPort,
-        database: dbName,
-        username: dbUsername,
-        password: dbPassword
+        host: credentials.host,
+        port: credentials.port,
+        database: credentials.database,
+        username: credentials.username,
+        password: credentials.password
       });
       
       // Try to connect to PostgreSQL
       const client = new Client({
-        host: dbHost,
-        port: parseInt(dbPort),
-        user: dbUsername,
-        password: dbPassword,
-        database: dbName,
+        host: credentials.host,
+        port: parseInt(credentials.port),
+        user: credentials.username,
+        password: credentials.password,
+        database: credentials.database,
         connectionTimeoutMillis: 5000
       });
 
@@ -288,24 +310,29 @@ sudo -u postgres psql -c "CREATE USER ${newUser.username} WITH PASSWORD '${newUs
     try {
       const { setCredentials } = require('../db/pgConnection.cjs');
       
-      // First, set credentials in pgConnection so it can connect
-      setCredentials({
+      const credentials = {
         host: config.host || 'localhost',
         port: config.port || 5432,
         database: config.dbName || 'vittoria_launchpad',
         username: config.username,
         password: config.password
-      });
+      };
       
-      // Now save to PostgreSQL settings table
-      await setSetting('db_host', config.host || 'localhost');
-      await setSetting('db_port', config.port || 5432);
-      await setSetting('db_name', config.dbName || 'vittoria_launchpad');
-      await setSetting('db_username', config.username);
-      await setSetting('db_password', config.password);
+      // First, save credentials to local file
+      saveLocalCredentials(credentials);
+      
+      // Then set credentials in pgConnection so it can connect
+      setCredentials(credentials);
+      
+      // Now save to PostgreSQL settings table (for backup/sync)
+      await setSetting('db_host', credentials.host);
+      await setSetting('db_port', credentials.port);
+      await setSetting('db_name', credentials.database);
+      await setSetting('db_username', credentials.username);
+      await setSetting('db_password', credentials.password);
       await setSetting('setup_completed', 'true');
       
-      console.log('[setupController] Configuration saved successfully to PostgreSQL');
+      console.log('[setupController] Configuration saved successfully');
       return {
         success: true,
         message: 'Configuration saved successfully'

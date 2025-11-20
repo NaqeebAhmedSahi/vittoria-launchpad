@@ -52,6 +52,12 @@ contextBridge.exposeInMainWorld("api", {
     // Check database schema (list tables and row counts)
     checkDatabaseSchema: (config) =>
       ipcRenderer.invoke("setup:checkDatabaseSchema", config),
+    
+    // Get current database connection info
+    getDatabaseInfo: () => ipcRenderer.invoke("setup:getDatabaseInfo"),
+    
+    // Disconnect database
+    disconnect: () => ipcRenderer.invoke("setup:disconnect"),
   },
   intake: {
     list: () => ipcRenderer.invoke("intake:list"),

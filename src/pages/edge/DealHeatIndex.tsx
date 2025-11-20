@@ -1,81 +1,129 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, BarChart3 } from "lucide-react";
-import { EdgeDataService } from "@/services/edgeDataService";
+import { TrendingUp, Flame } from "lucide-react";
+import { useState, useEffect } from "react";
+import type { DealHeatData } from "@/types/intelligence";
 
 export default function DealHeatIndex() {
-  const dealHeat = EdgeDataService.getDealHeatIndex();
+  const [heatData, setHeatData] = useState<DealHeatData[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const getBandColor = (band: string) => {
-    switch (band) {
-      case 'High': return 'bg-status-error/20 text-status-error border-status-error';
-      case 'Medium': return 'bg-status-warning/20 text-status-warning border-status-warning';
-      case 'Low': return 'bg-muted text-muted-foreground border-border';
-      default: return 'bg-muted text-muted-foreground border-border';
+  useEffect(() => {
+    loadHeatData();
+  }, []);
+
+  const loadHeatData = async () => {
+    try {
+      setLoading(true);
+      const data = await window.electron.invoke("intelligence:get-deal-heat-index");
+      setHeatData(data);
+    } catch (error) {
+      console.error("Failed to load deal heat index:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const groupedBySector = dealHeat.reduce((acc, item) => {
-    if (!acc[item.sector]) acc[item.sector] = [];
-    acc[item.sector].push(item);
-    return acc;
-  }, {} as Record<string, typeof dealHeat>);
+  const getHeatBadge = (band: string) => {
+    switch (band) {
+      case "high":
+        return <Badge variant="destructive" className="flex items-center gap-1">
+          <Flame className="h-3 w-3" />
+          High
+        </Badge>;
+      case "medium":
+        return <Badge variant="default" className="flex items-center gap-1">
+          <TrendingUp className="h-3 w-3" />
+          Medium
+        </Badge>;
+      case "low":
+        return <Badge variant="outline">Low</Badge>;
+      default:
+        return <Badge variant="secondary">Unknown</Badge>;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold">Deal Heat Index</h1>
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <TrendingUp className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Deal Heat Index</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Market activity levels by sector and region
-          </p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <Flame className="h-6 w-6" />
+          Deal Heat Index
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Deal activity levels by sector and region (last 12 months)
+        </p>
       </div>
 
-      <div className="grid gap-6">
-        {Object.entries(groupedBySector).map(([sector, items]) => (
-          <Card key={sector}>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                {sector}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {items.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-4 border rounded-lg space-y-2 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium text-foreground">{item.region}</div>
-                      <Badge className={getBandColor(item.activityBand)}>
-                        {item.activityBand}
-                      </Badge>
-                    </div>
-                    {item.dealCount !== undefined && (
-                      <div className="text-sm text-muted-foreground">
-                        {item.dealCount} active deals
-                      </div>
-                    )}
+      {heatData.length === 0 ? (
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center text-muted-foreground">
+              No deal activity data available. Add deals with sector and region information to see heat index.
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {heatData.map((item, idx) => (
+            <Card key={idx} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-lg">{item.sector}</CardTitle>
+                    <CardDescription className="mt-1">{item.region}</CardDescription>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                  {getHeatBadge(item.heatBand)}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Active Deals</span>
+                  <span className="text-2xl font-bold">{item.dealCount}</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      <Card className="bg-muted/50">
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">
-            <strong>Note:</strong> Activity bands are aggregated indicators only. 
-            No individual deal details, internal notes, or client-specific information is exposed.
-          </p>
+      {/* Legend */}
+      <Card className="bg-muted/30">
+        <CardHeader>
+          <CardTitle className="text-sm">Heat Index Bands</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <Badge variant="destructive" className="flex items-center gap-1">
+                <Flame className="h-3 w-3" />
+                High
+              </Badge>
+              <span className="text-muted-foreground">≥25 active deals (elevated competition)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="default" className="flex items-center gap-1">
+                <TrendingUp className="h-3 w-3" />
+                Medium
+              </Badge>
+              <span className="text-muted-foreground">10-24 active deals (moderate activity)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">Low</Badge>
+              <span className="text-muted-foreground">&lt;10 active deals (emerging opportunity)</span>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

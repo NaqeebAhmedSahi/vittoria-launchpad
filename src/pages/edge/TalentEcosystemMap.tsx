@@ -1,9 +1,33 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Building2 } from "lucide-react";
 import { EdgeDataService } from "@/services/edgeDataService";
+import { TalentEcosystemDrawer } from "@/components/edge/TalentEcosystemDrawer";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 export default function TalentEcosystemMap() {
   const platformTypes = EdgeDataService.getPlatformTypes();
+  const navigate = useNavigate();
+  const [selectedPlatform, setSelectedPlatform] = useState<any>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const handlePlatformClick = (platform: any) => {
+    setSelectedPlatform({
+      ...platform,
+      keyRoles: [
+        "Managing Director - Infrastructure Credit",
+        "Partner - Real Assets",
+        "Head of Origination",
+        "Senior Investment Professional"
+      ]
+    });
+    setDrawerOpen(true);
+  };
+
+  const handleFirmClick = (firmName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/firms?search=${encodeURIComponent(firmName)}`);
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -21,7 +45,11 @@ export default function TalentEcosystemMap() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {platformTypes.map((platform) => (
-          <Card key={platform.id} className="hover:border-primary transition-colors">
+          <Card 
+            key={platform.id} 
+            className="hover:border-primary transition-colors cursor-pointer"
+            onClick={() => handlePlatformClick(platform)}
+          >
             <CardHeader>
               <CardTitle className="text-base">{platform.name}</CardTitle>
               <CardDescription className="text-sm">
@@ -37,7 +65,8 @@ export default function TalentEcosystemMap() {
                   {platform.exampleFirms.map((firm) => (
                     <div
                       key={firm}
-                      className="px-2 py-1 bg-muted rounded text-sm text-foreground"
+                      className="px-2 py-1 bg-muted rounded text-sm text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
+                      onClick={(e) => handleFirmClick(firm, e)}
                     >
                       {firm}
                     </div>
@@ -53,10 +82,16 @@ export default function TalentEcosystemMap() {
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground">
             <strong>Note:</strong> This view contains public-safe firm categories only. 
-            No internal assessments, political risks, or confidential client information is shown.
+          No internal assessments, political risks, or confidential client information is shown.
           </p>
         </CardContent>
       </Card>
+
+      <TalentEcosystemDrawer
+        platform={selectedPlatform}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      />
     </div>
   );
 }

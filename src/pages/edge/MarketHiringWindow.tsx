@@ -2,9 +2,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "lucide-react";
 import { EdgeDataService } from "@/services/edgeDataService";
+import { HiringWindowDrawer } from "@/components/edge/HiringWindowDrawer";
+import { useState } from "react";
 
 export default function MarketHiringWindow() {
   const hiringWindows = EdgeDataService.getHiringWindows();
+  const [selectedPeriod, setSelectedPeriod] = useState<any>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const handlePeriodClick = (period: any) => {
+    setSelectedPeriod(period);
+    setDrawerOpen(true);
+  };
 
   const getWindowColor = (window: string) => {
     switch (window) {
@@ -31,7 +40,11 @@ export default function MarketHiringWindow() {
 
       <div className="grid gap-4">
         {hiringWindows.map((period, idx) => (
-          <Card key={idx} className="hover:border-primary transition-colors">
+          <Card 
+            key={idx} 
+            className="hover:border-primary transition-colors cursor-pointer"
+            onClick={() => handlePeriodClick(period)}
+          >
             <CardContent className="pt-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1 space-y-2">
@@ -83,10 +96,16 @@ export default function MarketHiringWindow() {
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground">
             <strong>Note:</strong> This is a general market view based on aggregated signals. 
-            No firm-specific hiring plans or confidential mandate details are exposed.
+          No firm-specific hiring plans or confidential mandate details are exposed.
           </p>
         </CardContent>
       </Card>
+
+      <HiringWindowDrawer
+        period={selectedPeriod}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      />
     </div>
   );
 }

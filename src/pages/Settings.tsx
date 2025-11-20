@@ -28,7 +28,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import PromptConfig from "@/components/PromptConfig";
 import { FinancialIntelligenceEngine } from "@/services/financialIntelligenceEngine";
-import { sampleCashflow13Week, sampleBusinessLedger, sampleTaxDeadlines } from "@/data/sampleFinancials";
+import { sample13WeekCashflow, sampleBusinessLedgerSummary, sampleTaxDeadlines } from "@/data/sampleFinancials";
 import type { FinancialAlert, FinancialRecommendation } from "@/types/financial";
 
 function AIConfigCard() {
@@ -444,130 +444,135 @@ export default function Settings() {
       const isDatabaseUp = dbStatus.success && dbStatus.connected;
 
       // Simulate checking other services (in production, these would be real API calls)
-      const components = [
+      const components: Array<{
+        name: string;
+        status: 'operational' | 'degraded' | 'maintenance' | 'outage';
+        category: 'core' | 'feature' | 'migration';
+        description?: string;
+      }> = [
         // Core Services
         {
           name: 'Database Connection',
-          status: isDatabaseUp ? 'operational' : 'outage' as const,
-          category: 'core' as const,
+          status: isDatabaseUp ? 'operational' : 'outage',
+          category: 'core',
           description: isDatabaseUp ? `PostgreSQL ${dbStatus.version || ''}` : 'Cannot connect to database'
         },
         {
           name: 'Authentication Service',
-          status: isDatabaseUp ? 'operational' : 'degraded' as const,
-          category: 'core' as const,
+          status: isDatabaseUp ? 'operational' : 'degraded',
+          category: 'core',
           description: 'User authentication and session management'
         },
         {
           name: 'File Storage',
-          status: 'operational' as const,
-          category: 'core' as const,
+          status: 'operational',
+          category: 'core',
           description: 'Local file system storage for CVs and documents'
         },
         {
           name: 'LLM Service',
-          status: 'operational' as const,
-          category: 'core' as const,
+          status: 'operational',
+          category: 'core',
           description: 'AI-powered CV parsing and analysis'
         },
         
         // Feature Modules
         {
           name: 'CV Intake & Parsing',
-          status: 'operational' as const,
-          category: 'feature' as const,
+          status: 'operational',
+          category: 'feature',
           description: 'Upload and parse CV documents'
         },
         {
           name: 'Candidate Management',
-          status: 'operational' as const,
-          category: 'feature' as const,
+          status: 'operational',
+          category: 'feature',
           description: 'Create, update, and manage candidate profiles'
         },
         {
           name: 'Mandate Management',
-          status: 'operational' as const,
-          category: 'feature' as const,
+          status: 'operational',
+          category: 'feature',
           description: 'Job mandate creation and tracking'
         },
         {
           name: 'Firm Management',
-          status: 'operational' as const,
-          category: 'feature' as const,
+          status: 'operational',
+          category: 'feature',
           description: 'Client firm database and management'
         },
         {
           name: 'Quality Scoring',
-          status: 'operational' as const,
-          category: 'feature' as const,
+          status: 'operational',
+          category: 'feature',
           description: 'CV quality assessment and scoring'
         },
         {
           name: 'Match Scoring Engine',
-          status: 'degraded' as const,
-          category: 'feature' as const,
+          status: 'degraded',
+          category: 'feature',
           description: 'Candidate-mandate matching (migration in progress)'
         },
         {
           name: 'Team Management',
-          status: 'maintenance' as const,
-          category: 'feature' as const,
+          status: 'maintenance',
+          category: 'feature',
           description: 'Planned for future release'
         },
         {
           name: 'Deal Tracking',
-          status: 'maintenance' as const,
-          category: 'feature' as const,
+          status: 'maintenance',
+          category: 'feature',
           description: 'Planned for future release'
         },
         {
           name: 'Finance & Invoicing',
-          status: 'maintenance' as const,
-          category: 'feature' as const,
+          status: 'maintenance',
+          category: 'feature',
           description: 'Planned for future release'
         },
         
         // Database Migration Status
         {
           name: 'Authentication Model',
-          status: 'operational' as const,
-          category: 'migration' as const,
+          status: 'operational',
+          category: 'migration',
           description: 'PostgreSQL migration complete'
         },
         {
           name: 'Settings Model',
-          status: 'operational' as const,
-          category: 'migration' as const,
+          status: 'operational',
+          category: 'migration',
           description: 'PostgreSQL migration complete'
         },
         {
           name: 'Candidate Model',
-          status: 'operational' as const,
-          category: 'migration' as const,
+          status: 'operational',
+          category: 'migration',
           description: 'PostgreSQL migration complete'
         },
         {
           name: 'Firm Model',
-          status: 'operational' as const,
-          category: 'migration' as const,
+          status: 'operational',
+          category: 'migration',
           description: 'PostgreSQL migration complete'
         },
         {
           name: 'Mandate Model',
-          status: 'operational' as const,
-          category: 'migration' as const,
+          status: 'operational',
+          category: 'migration',
           description: 'PostgreSQL migration complete'
         },
         {
           name: 'Intake Model',
-          status: 'degraded' as const,
-          category: 'migration' as const,
+          status: 'degraded',
+          category: 'migration',
           description: 'Migration in progress - schema updated, functions being migrated'
         },
         {
           name: 'Scoring Model',
-          status: 'degraded' as const,
-          category: 'migration' as const,
+          status: 'degraded',
+          category: 'migration',
           description: 'Migration pending'
         }
       ];

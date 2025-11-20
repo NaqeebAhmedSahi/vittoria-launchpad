@@ -61,16 +61,16 @@ export interface Mandate {
   id: number;
   name: string;
   firm_id: number;
-  location: string | null;
-  primary_sector: string | null;
+  location?: string | null;
+  primary_sector?: string | null;
   sectors: string[];
   functions: string[];
   asset_classes: string[];
   regions: string[];
-  seniority_min: string | null;
-  seniority_max: string | null;
+  seniority_min?: string | null;
+  seniority_max?: string | null;
   status: string; // 'OPEN' | 'ON_HOLD' | 'CLOSED' | etc
-  raw_brief: string | null;
+  raw_brief?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -206,10 +206,7 @@ export default function Mandates() {
           id: mandateToEdit.id,
           values,
         });
-        const result = await window.api.mandate.update({
-          mandateId: mandateToEdit.id,
-          updates: values,
-        });
+        const result = await window.api.mandate.update(mandateToEdit.id, values);
         if (!result.success) {
           toast({
             title: "Error",

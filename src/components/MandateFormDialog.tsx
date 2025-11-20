@@ -29,16 +29,16 @@ interface MandateEditData {
   id: number;
   name: string;
   firm_id: number;
-  location: string | null;
-  primary_sector: string | null;
+  location?: string | null;
+  primary_sector?: string | null;
   sectors: string[];
   functions: string[];
   asset_classes: string[];
   regions: string[];
-  seniority_min: string | null;
-  seniority_max: string | null;
+  seniority_min?: string | null;
+  seniority_max?: string | null;
   status: string;
-  raw_brief: string | null;
+  raw_brief?: string | null;
 }
 
 interface MandateFormDialogProps {

@@ -246,8 +246,11 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
         setError(null);
 
         try {
-            const result = await api.setup.createUserWindows({ newUser: { username: newUser.username, password: newUser.password }, serviceName: '' });
-            console.log('[Setup] createUserWindows result:', result);
+            const result = await api.setup.createUser({
+                superuser: { host: credentials.host, port: credentials.port, username: 'postgres', password: superuserPassword },
+                newUser: { username: newUser.username, password: newUser.password }
+            });
+            console.log('[Setup] createUser result:', result);
 
             if (result.success) {
                 toast({ title: 'User Created', description: `User ${newUser.username} created (or already existed).` });
@@ -259,8 +262,6 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
             } else {
                 setError(result.message || result.error || 'Failed to create user on Windows');
             }
-
-            if (result.logs) setWinLogs(result.logs);
         } catch (err: any) {
             console.error('[Setup] createUserWindows error:', err);
             setError(err.message || 'Failed to create user on Windows');

@@ -192,10 +192,7 @@ export default function Firms() {
           return;
         }
       } else if (mode === "edit" && firmToEdit) {
-        const result = await window.api.firm.update({
-          firmId: firmToEdit.id,
-          updates: data,
-        });
+        const result = await window.api.firm.update(firmToEdit.id, data);
         if (result.success) {
           toast({
             title: "Firm updated",

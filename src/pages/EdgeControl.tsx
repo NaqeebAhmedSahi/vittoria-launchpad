@@ -2,7 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Shield, Database, FileText, Building2, Users } from "lucide-react";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 const edgeExportsData = [
   { id: 1, name: "Org Charts", description: "Expose organizational structure data", enabled: true, icon: Building2 },
@@ -20,6 +24,56 @@ const exportLogsData = [
 ];
 
 export default function EdgeControl() {
+  const { toast } = useToast();
+  const [exports, setExports] = useState(edgeExportsData);
+  const [logs, setLogs] = useState(exportLogsData);
+  const [selectedExport, setSelectedExport] = useState<any>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+
+  const handleToggle = (id: number, currentState: boolean) => {
+    setExports(prevExports =>
+      prevExports.map(exp =>
+        exp.id === id ? { ...exp, enabled: !currentState } : exp
+      )
+    );
+    const exportItem = exports.find(e => e.id === id);
+    toast({
+      title: `${exportItem?.name} ${!currentState ? 'enabled' : 'disabled'}`,
+      description: `Edge view has been ${!currentState ? 'enabled' : 'disabled'} successfully.`,
+    });
+  };
+
+  const handleExportClick = (exportLog: any) => {
+    setSelectedExport(exportLog);
+    setDetailModalOpen(true);
+  };
+
+  const handleOpenFile = () => {
+    toast({
+      title: "Opening file",
+      description: `Would open: ${selectedExport?.location}`,
+    });
+  };
+
+  const handleRerunExport = () => {
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    const newExport = {
+      type: selectedExport.type,
+      requestedBy: "System Re-run",
+      timestamp,
+      records: selectedExport.records + Math.floor(Math.random() * 5),
+      location: selectedExport.location.replace(/\d{8}_\d{4}/, `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`)
+    };
+    
+    setLogs(prevLogs => [newExport, ...prevLogs]);
+    toast({
+      title: "Export re-run initiated",
+      description: "The export has been queued and will appear at the top of the list.",
+    });
+    setDetailModalOpen(false);
+  };
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -56,7 +110,10 @@ export default function EdgeControl() {
                     <Badge variant={item.enabled ? "default" : "secondary"}>
                       {item.enabled ? "Enabled" : "Disabled"}
                     </Badge>
-                    <Switch checked={item.enabled} />
+                    <Switch 
+                      checked={item.enabled}
+                      onCheckedChange={() => handleToggle(item.id, item.enabled)}
+                    />
                   </div>
                 </div>
               );
@@ -82,8 +139,12 @@ export default function EdgeControl() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {exportLogsData.map((log, idx) => (
-                <TableRow key={idx}>
+              {logs.map((log, idx) => (
+                <TableRow 
+                  key={idx}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleExportClick(log)}
+                >
                   <TableCell>
                     <Badge variant="outline">{log.type}</Badge>
                   </TableCell>

@@ -1,9 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Building, CheckCircle } from "lucide-react";
 import { EdgeDataService } from "@/services/edgeDataService";
+import { FirmArchetypeDrawer } from "@/components/edge/FirmArchetypeDrawer";
+import { useState } from "react";
 
 export default function FirmArchetypeMap() {
   const archetypes = EdgeDataService.getFirmArchetypes();
+  const [selectedArchetype, setSelectedArchetype] = useState<any>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const handleArchetypeClick = (archetype: any) => {
+    setSelectedArchetype({ ...archetype, exampleFirms: ["Goldman Sachs", "J.P. Morgan", "Morgan Stanley", "Barclays"] });
+    setDrawerOpen(true);
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -21,7 +30,11 @@ export default function FirmArchetypeMap() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {archetypes.map((archetype) => (
-          <Card key={archetype.id} className="hover:border-primary transition-colors">
+          <Card 
+            key={archetype.id} 
+            className="hover:border-primary transition-colors cursor-pointer"
+            onClick={() => handleArchetypeClick(archetype)}
+          >
             <CardHeader>
               <CardTitle className="text-base">{archetype.name}</CardTitle>
               <CardDescription className="text-sm">
@@ -49,10 +62,16 @@ export default function FirmArchetypeMap() {
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground">
             <strong>Note:</strong> Archetypes contain public-safe descriptions only. 
-            No cultural assessments, political dynamics, or internal firm challenges are exposed.
+          No cultural assessments, political dynamics, or internal firm challenges are exposed.
           </p>
         </CardContent>
       </Card>
+
+      <FirmArchetypeDrawer
+        archetype={selectedArchetype}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      />
     </div>
   );
 }

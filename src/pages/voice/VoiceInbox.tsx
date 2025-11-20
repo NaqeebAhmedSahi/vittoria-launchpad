@@ -3,10 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mic, Search, Settings } from "lucide-react";
+import { Mic, Search, Settings, CheckCircle, ListTodo } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { VoiceSettingsModal } from "@/components/voice/VoiceSettingsModal";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock data
 const mockVoiceNotes = [
@@ -17,6 +20,11 @@ const mockVoiceNotes = [
     status: 'Transcribed',
     linkedEntities: 2,
     duration: '3:45',
+    transcript: 'Following up on the Infrastructure PE Partner mandate for Brookfield...',
+    linkedEntitiesDetails: [
+      { type: 'Mandate', name: 'Infrastructure PE Partner - Brookfield', id: 'm-001' },
+      { type: 'Candidate', name: 'James Patterson', id: 'c-042' }
+    ]
   },
   {
     id: 'vn-002',
@@ -25,6 +33,13 @@ const mockVoiceNotes = [
     status: 'Parsed',
     linkedEntities: 4,
     duration: '5:22',
+    transcript: 'Meeting notes from today\'s client catch-up with KKR...',
+    linkedEntitiesDetails: [
+      { type: 'Firm', name: 'KKR', id: 'f-015' },
+      { type: 'Mandate', name: 'Real Estate Partner', id: 'm-008' },
+      { type: 'Candidate', name: 'Sarah Chen', id: 'c-023' },
+      { type: 'Candidate', name: 'Michael Roberts', id: 'c-034' }
+    ]
   },
   {
     id: 'vn-003',
@@ -33,6 +48,8 @@ const mockVoiceNotes = [
     status: 'Queued',
     linkedEntities: 0,
     duration: '2:15',
+    transcript: '',
+    linkedEntitiesDetails: []
   },
   {
     id: 'vn-004',
@@ -41,19 +58,61 @@ const mockVoiceNotes = [
     status: 'Transcribed',
     linkedEntities: 1,
     duration: '4:10',
+    transcript: 'Quick update on the Digital Infrastructure search...',
+    linkedEntitiesDetails: [
+      { type: 'Mandate', name: 'Digital Infrastructure VP', id: 'm-012' }
+    ]
   },
 ];
 
 export default function VoiceInbox() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedNote, setSelectedNote] = useState<any>(null);
+  const [notes, setNotes] = useState(mockVoiceNotes);
 
-  const filteredNotes = mockVoiceNotes.filter((note) => {
-    const matchesSearch = note.id.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredNotes = notes.filter((note) => {
+    const matchesSearch = note.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         note.source.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || note.status.toLowerCase() === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const handleNoteClick = (note: any) => {
+    setSelectedNote(note);
+    setDrawerOpen(true);
+  };
+
+  const handleMarkAsParsed = (noteId: string) => {
+    setNotes(prevNotes =>
+      prevNotes.map(note =>
+        note.id === noteId ? { ...note, status: 'Parsed' } : note
+      )
+    );
+    toast({
+      title: "Note marked as parsed",
+      description: "The voice note has been marked as fully processed.",
+    });
+    setDrawerOpen(false);
+  };
+
+  const handleCreateTask = (noteId: string) => {
+    toast({
+      title: "Task created",
+      description: "A follow-up task has been created from this voice note.",
+    });
+  };
+
+  const handleEntityClick = (entityType: string, entityId: string) => {
+    setDrawerOpen(false);
+    if (entityType === 'Candidate') navigate(`/candidates/${entityId}`);
+    else if (entityType === 'Mandate') navigate(`/mandates/${entityId}`);
+    else if (entityType === 'Firm') navigate(`/firms/${entityId}`);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -78,7 +137,7 @@ export default function VoiceInbox() {
             </p>
           </div>
         </div>
-        <Button variant="outline" onClick={() => navigate('/settings?tab=voice')}>
+        <Button variant="outline" onClick={() => setSettingsOpen(true)}>
           <Settings className="h-4 w-4 mr-2" />
           Voice Settings
         </Button>
@@ -131,7 +190,7 @@ export default function VoiceInbox() {
                 <TableRow
                   key={note.id}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/voice/${note.id}`)}
+                  onClick={() => handleNoteClick(note)}
                 >
                   <TableCell className="font-mono text-sm">{note.id}</TableCell>
                   <TableCell className="text-sm">{note.recordedAt}</TableCell>
@@ -160,6 +219,88 @@ export default function VoiceInbox() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Voice Note Detail Drawer */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+          {selectedNote && (
+            <>
+              <SheetHeader>
+                <SheetTitle>Voice Note: {selectedNote.id}</SheetTitle>
+                <SheetDescription>
+                  Recorded {selectedNote.recordedAt} · {selectedNote.duration}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-6 space-y-6">
+                {/* Status */}
+                <div>
+                  <Badge variant={getStatusColor(selectedNote.status) as any}>
+                    {selectedNote.status}
+                  </Badge>
+                </div>
+
+                {/* Transcript */}
+                {selectedNote.transcript && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">Transcript</h3>
+                    <div className="p-4 bg-muted rounded-lg text-sm text-foreground">
+                      {selectedNote.transcript}
+                    </div>
+                  </div>
+                )}
+
+                {/* Linked Entities */}
+                {selectedNote.linkedEntitiesDetails.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">Linked Entities</h3>
+                    <div className="space-y-2">
+                      {selectedNote.linkedEntitiesDetails.map((entity: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className="p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                          onClick={() => handleEntityClick(entity.type, entity.id)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium text-foreground">{entity.name}</div>
+                            <Badge variant="outline" className="text-xs">{entity.type}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => handleCreateTask(selectedNote.id)}
+                  >
+                    <ListTodo className="h-4 w-4 mr-2" />
+                    Create Task
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    onClick={() => handleMarkAsParsed(selectedNote.id)}
+                    disabled={selectedNote.status === 'Parsed'}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Mark as Parsed
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Voice Settings Modal */}
+      <VoiceSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
     </div>
   );
 }

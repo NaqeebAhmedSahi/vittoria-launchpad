@@ -15,6 +15,11 @@ import {
   TrendingUp,
   Receipt,
   User,
+  Brain,
+  Mic,
+  Target,
+  Calendar,
+  BarChart,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useState } from "react";
@@ -36,16 +41,32 @@ const navItems = [
       { name: "Invoices & P&L", path: "/finance", icon: Receipt },
       { name: "Business Financials", path: "/finance/business", icon: TrendingUp },
       { name: "Personal Financials", path: "/finance/personal", icon: User },
+      { name: "Personal Ledger", path: "/finance/personal/ledger", icon: FileText },
     ]
   },
+  { name: "Intelligence", path: "/intelligence", icon: Brain },
+  { name: "Voice Notes", path: "/voice", icon: Mic },
   { name: "Templates", path: "/templates", icon: FileText },
-  { name: "Edge Control", path: "/edge-control", icon: Shield },
+  { 
+    name: "Edge Control", 
+    path: "/edge-control", 
+    icon: Shield,
+    submenu: [
+      { name: "Overview", path: "/edge-control", icon: Shield },
+      { name: "Deal Heat Index", path: "/edge/deal-heat", icon: TrendingUp },
+      { name: "Talent Ecosystem", path: "/edge/talent-ecosystem", icon: Users },
+      { name: "Strategic Themes", path: "/edge/strategic-themes", icon: Target },
+      { name: "Hiring Window", path: "/edge/hiring-window", icon: Calendar },
+      { name: "Deal Structure", path: "/edge/deal-structure", icon: BarChart },
+      { name: "Firm Archetypes", path: "/edge/firm-archetypes", icon: Building2 },
+    ]
+  },
   { name: "Settings", path: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
-  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance"]);
+  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control"]);
 
   const toggleExpand = (path: string) => {
     setExpandedItems(prev => 

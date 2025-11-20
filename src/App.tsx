@@ -21,9 +21,19 @@ import VATAndTax from "./pages/financials/business/VATAndTax";
 import ManageExpenses from "./pages/financials/business/ManageExpenses";
 import ManagePersonalExpenses from "./pages/financials/personal/ManagePersonalExpenses";
 import PersonalFinancialsDashboard from "./pages/financials/personal/PersonalFinancialsDashboard";
+import PersonalLedger from "./pages/financials/personal/PersonalLedger";
 import AccountantExports from "./pages/financials/AccountantExports";
 import Templates from "./pages/Templates";
 import EdgeControl from "./pages/EdgeControl";
+import DealHeatIndex from "./pages/edge/DealHeatIndex";
+import TalentEcosystemMap from "./pages/edge/TalentEcosystemMap";
+import StrategicThemeAlignment from "./pages/edge/StrategicThemeAlignment";
+import MarketHiringWindow from "./pages/edge/MarketHiringWindow";
+import DealStructureOverview from "./pages/edge/DealStructureOverview";
+import FirmArchetypeMap from "./pages/edge/FirmArchetypeMap";
+import IntelligenceHub from "./pages/intelligence/IntelligenceHub";
+import VoiceInbox from "./pages/voice/VoiceInbox";
+import VoiceNoteDetail from "./pages/voice/VoiceNoteDetail";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import SignIn from "./pages/SignIn";
@@ -199,10 +209,27 @@ const App = () => {
               <Route path="/finance/expenses/business" element={<ManageExpenses />} />
               <Route path="/finance/expenses/personal" element={<ManagePersonalExpenses />} />
               <Route path="/finance/personal" element={<PersonalFinancialsDashboard />} />
+              <Route path="/finance/personal/ledger" element={<PersonalLedger />} />
               <Route path="/finance/exports" element={<AccountantExports />} />
               
+              {/* Intelligence Routes */}
+              <Route path="/intelligence" element={<IntelligenceHub />} />
+              
+              {/* Voice Notes Routes */}
+              <Route path="/voice" element={<VoiceInbox />} />
+              <Route path="/voice/:noteId" element={<VoiceNoteDetail />} />
+              
               <Route path="/templates" element={<Templates />} />
+              
+              {/* Edge Control Routes */}
               <Route path="/edge-control" element={<EdgeControl />} />
+              <Route path="/edge/deal-heat" element={<DealHeatIndex />} />
+              <Route path="/edge/talent-ecosystem" element={<TalentEcosystemMap />} />
+              <Route path="/edge/strategic-themes" element={<StrategicThemeAlignment />} />
+              <Route path="/edge/hiring-window" element={<MarketHiringWindow />} />
+              <Route path="/edge/deal-structure" element={<DealStructureOverview />} />
+              <Route path="/edge/firm-archetypes" element={<FirmArchetypeMap />} />
+              
               <Route path="/settings" element={<Settings />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

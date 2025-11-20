@@ -9,10 +9,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { CandidateFormDialog } from "./CandidateFormDialog";
 import { MandateFormDialog } from "./MandateFormDialog";
+import { FinancialIntelligenceDropdown } from "./FinancialIntelligenceDropdown";
 import { useToast } from "@/hooks/use-toast";
+import { FinancialIntelligenceEngine } from "@/services/financialIntelligenceEngine";
+import { 
+  sample13WeekCashflow, 
+  sampleBusinessLedgerSummary, 
+  sampleTaxDeadlines 
+} from "@/data/sampleFinancials";
 
 interface TopBarProps {
   onSignOut?: () => void;
@@ -23,8 +30,25 @@ export function TopBar({ onSignOut, currentUser }: TopBarProps) {
   const [candidateDialogOpen, setCandidateDialogOpen] = useState(false);
   const [mandateDialogOpen, setMandateDialogOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [alertCount, setAlertCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Calculate alert count from Financial Intelligence Engine
+    const analysis = FinancialIntelligenceEngine.runFullAnalysis({
+      cashflow: sample13WeekCashflow,
+      ledger: sampleBusinessLedgerSummary,
+      taxDeadlines: sampleTaxDeadlines,
+      currentSalary: 8000 * 12,
+    });
+    
+    const activeAlerts = analysis.alerts.filter(a => !a.dismissed);
+    const criticalCount = activeAlerts.filter(a => a.severity === 'critical').length;
+    const warningCount = activeAlerts.filter(a => a.severity === 'warning').length;
+    
+    setAlertCount(criticalCount + warningCount);
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -162,10 +186,14 @@ export function TopBar({ onSignOut, currentUser }: TopBarProps) {
 
         {/* Right: icons pushed fully to the right */}
         <div className="flex items-center gap-2 ml-auto">
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-4 w-4" />
-            <span className="absolute top-1 right-1 h-2 w-2 bg-destructive rounded-full" />
-          </Button>
+          <FinancialIntelligenceDropdown>
+            <Button variant="ghost" size="icon" className="relative">
+              <Bell className="h-4 w-4" />
+              {alertCount > 0 && (
+                <span className="absolute top-1 right-1 h-2 w-2 bg-destructive rounded-full" />
+              )}
+            </Button>
+          </FinancialIntelligenceDropdown>
 
           <Button variant="ghost" size="icon">
             <CheckSquare className="h-4 w-4" />

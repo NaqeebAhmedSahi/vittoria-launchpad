@@ -1,12 +1,36 @@
-# Financial Intelligence Layer - Architecture Overview
+financial_intelligence_overviewfinancial_intelligence_overview# Financial Intelligence Layer - Architecture Overview
 
 ## Purpose
 The Financial Intelligence Engine provides automated reasoning and analysis for Vittoria's financials module. It evaluates ledger data, cashflow, tax obligations, and generates recommendations.
 
 ## Current Implementation
 - **Location**: `src/services/financialIntelligenceEngine.ts`
-- **Status**: Mock implementation with hardcoded rules
+- **Status**: ✅ **Active** - Mock implementation with hardcoded rules
 - **Data Source**: Sample fixtures in `src/data/sampleFinancials.ts`
+- **UI Integration**: ✅ **Complete** - Visible in TopBar and Business Financials page
+
+## UI Visibility
+
+### 1. TopBar Bell Icon Dropdown 🔔
+- **Location**: Top navigation bar (right side)
+- **Component**: `src/components/FinancialIntelligenceDropdown.tsx`
+- **Features**:
+  - Red notification dot when alerts exist
+  - Tabbed interface: Alerts | Insights
+  - Real-time alert count display
+  - Dismissible alerts and recommendations
+  - Color-coded severity (critical/warning/info)
+  - Priority badges (high/medium/low)
+
+### 2. Business Financials Dashboard 📊
+- **Route**: `/finance/business`
+- **Component**: `src/pages/financials/business/BusinessFinancialsDashboard.tsx`
+- **Access**: Sidebar → Finance → Business Financials
+- **Features**:
+  - `AlertBanner` component for critical/warning alerts
+  - `InsightsPanel` component for recommendations
+  - Full financial dashboard with ledger summaries
+  - Tax deadlines, dividend schedules, salary info
 
 ## Core Functions
 
@@ -61,9 +85,26 @@ const advice = await generateAnalysis({
 ```
 
 ## UI Integration
-- **InsightsPanel**: Displays recommendations
-- **AlertBanner**: Shows critical/warning alerts
-- Used in: BusinessFinancialsDashboard, other financial pages
+
+### Current Implementation (✅ Live)
+1. **TopBar Bell Icon**
+   - Component: `src/components/FinancialIntelligenceDropdown.tsx`
+   - Shows real-time alerts and recommendations
+   - Accessible from any page via top navigation
+   
+2. **Business Financials Dashboard**
+   - Route: `/finance/business`
+   - Components: `AlertBanner` and `InsightsPanel`
+   - Dedicated page for comprehensive financial intelligence
+   
+3. **Sidebar Navigation**
+   - Component: `src/components/AppSidebar.tsx`
+   - Expandable Finance menu with "Business Financials" link
+
+### How to Access
+1. **Bell Icon**: Click the bell 🔔 in the top-right corner (next to user profile)
+2. **Sidebar**: Click "Finance" → "Business Financials"
+3. **Direct URL**: Navigate to `/finance/business`
 
 ## Extension
 Add new rules in `src/services/financialRules.ts` and call from `runFullAnalysis()`

@@ -13,6 +13,15 @@ import Firms from "./pages/Firms";
 import Teams from "./pages/Teams";
 import Deals from "./pages/Deals";
 import Finance from "./pages/Finance";
+import BusinessFinancialsDashboard from "./pages/financials/business/BusinessFinancialsDashboard";
+import BusinessLedger from "./pages/financials/business/BusinessLedger";
+import BusinessCashflow from "./pages/financials/business/BusinessCashflow";
+import DividendsSalary from "./pages/financials/business/DividendsSalary";
+import VATAndTax from "./pages/financials/business/VATAndTax";
+import ManageExpenses from "./pages/financials/business/ManageExpenses";
+import ManagePersonalExpenses from "./pages/financials/personal/ManagePersonalExpenses";
+import PersonalFinancialsDashboard from "./pages/financials/personal/PersonalFinancialsDashboard";
+import AccountantExports from "./pages/financials/AccountantExports";
 import Templates from "./pages/Templates";
 import EdgeControl from "./pages/EdgeControl";
 import Settings from "./pages/Settings";
@@ -179,7 +188,19 @@ const App = () => {
               <Route path="/firms" element={<Firms />} />
               <Route path="/teams" element={<Teams />} />
               <Route path="/deals" element={<Deals />} />
+              
+              {/* Finance Routes */}
               <Route path="/finance" element={<Finance />} />
+              <Route path="/finance/business" element={<BusinessFinancialsDashboard />} />
+              <Route path="/finance/business/ledger" element={<BusinessLedger />} />
+              <Route path="/finance/business/cashflow" element={<BusinessCashflow />} />
+              <Route path="/finance/business/dividends-salary" element={<DividendsSalary />} />
+              <Route path="/finance/business/vat-tax" element={<VATAndTax />} />
+              <Route path="/finance/expenses/business" element={<ManageExpenses />} />
+              <Route path="/finance/expenses/personal" element={<ManagePersonalExpenses />} />
+              <Route path="/finance/personal" element={<PersonalFinancialsDashboard />} />
+              <Route path="/finance/exports" element={<AccountantExports />} />
+              
               <Route path="/templates" element={<Templates />} />
               <Route path="/edge-control" element={<EdgeControl />} />
               <Route path="/settings" element={<Settings />} />

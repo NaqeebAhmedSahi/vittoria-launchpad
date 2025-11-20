@@ -10,8 +10,15 @@ import {
   FileText,
   Shield,
   Settings,
+  ChevronRight,
+  ChevronDown,
+  TrendingUp,
+  Receipt,
+  User,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { useState } from "react";
+import { useLocation } from "react-router-dom";
 
 const navItems = [
   { name: "Dashboard", path: "/", icon: LayoutDashboard },
@@ -21,27 +28,90 @@ const navItems = [
   { name: "Teams", path: "/teams", icon: UsersRound },
   { name: "Mandates", path: "/mandates", icon: Briefcase },
   { name: "Deals", path: "/deals", icon: HandshakeIcon },
-  { name: "Finance", path: "/finance", icon: DollarSign },
+  { 
+    name: "Finance", 
+    path: "/finance", 
+    icon: DollarSign,
+    submenu: [
+      { name: "Invoices & P&L", path: "/finance", icon: Receipt },
+      { name: "Business Financials", path: "/finance/business", icon: TrendingUp },
+      { name: "Personal Financials", path: "/finance/personal", icon: User },
+    ]
+  },
   { name: "Templates", path: "/templates", icon: FileText },
   { name: "Edge Control", path: "/edge-control", icon: Shield },
   { name: "Settings", path: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
+  const location = useLocation();
+  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance"]);
+
+  const toggleExpand = (path: string) => {
+    setExpandedItems(prev => 
+      prev.includes(path) 
+        ? prev.filter(p => p !== path)
+        : [...prev, path]
+    );
+  };
+
+  const isActive = (path: string, end?: boolean) => {
+    if (end) {
+      return location.pathname === path;
+    }
+    return location.pathname.startsWith(path);
+  };
+
   return (
     <aside className="w-56 border-r bg-card">
       <nav className="p-2 space-y-0.5">
         {navItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.path === "/"}
-            className="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors"
-            activeClassName="bg-muted text-primary font-medium"
-          >
-            <item.icon className="h-4 w-4" />
-            {item.name}
-          </NavLink>
+          <div key={item.path}>
+            {item.submenu ? (
+              <>
+                <button
+                  onClick={() => toggleExpand(item.path)}
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon className="h-4 w-4" />
+                    {item.name}
+                  </div>
+                  {expandedItems.includes(item.path) ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                </button>
+                {expandedItems.includes(item.path) && (
+                  <div className="ml-4 mt-0.5 space-y-0.5">
+                    {item.submenu.map((subItem) => (
+                      <NavLink
+                        key={subItem.path}
+                        to={subItem.path}
+                        end={subItem.path === item.path}
+                        className="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors"
+                        activeClassName="bg-muted text-primary font-medium"
+                      >
+                        <subItem.icon className="h-4 w-4" />
+                        {subItem.name}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <NavLink
+                to={item.path}
+                end={item.path === "/"}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors"
+                activeClassName="bg-muted text-primary font-medium"
+              >
+                <item.icon className="h-4 w-4" />
+                {item.name}
+              </NavLink>
+            )}
+          </div>
         ))}
       </nav>
     </aside>

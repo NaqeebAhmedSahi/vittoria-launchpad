@@ -20,10 +20,16 @@ import {
   XCircle,
   Clock,
   RefreshCw,
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import PromptConfig from "@/components/PromptConfig";
+import { FinancialIntelligenceEngine } from "@/services/financialIntelligenceEngine";
+import { sampleCashflow13Week, sampleBusinessLedger, sampleTaxDeadlines } from "@/data/sampleFinancials";
+import type { FinancialAlert, FinancialRecommendation } from "@/types/financial";
 
 function AIConfigCard() {
   const { toast } = useToast();

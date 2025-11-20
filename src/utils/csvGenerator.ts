@@ -40,3 +40,17 @@ export function formatCurrency(amount: number): string {
 export function formatDate(date: string): string {
   return new Date(date).toLocaleDateString('en-GB');
 }
+
+export function generateTransactionsCSV(transactions: any[]): string {
+  const headers = ['Date', 'Description', 'Category', 'Amount', 'Type', 'Reference', 'Reconciled'];
+  const rows = transactions.map(txn => [
+    txn.date,
+    txn.description,
+    txn.category,
+    txn.amount,
+    txn.type,
+    txn.reference || '',
+    txn.reconciled ? 'Yes' : 'No'
+  ]);
+  return generateCSV(headers, rows);
+}

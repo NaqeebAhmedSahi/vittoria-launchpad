@@ -13,6 +13,7 @@ const { registerFirmIpcHandlers } = require("./controllers/firmController.cjs");
 const { registerMandateIpcHandlers } = require("./controllers/mandateController.cjs");
 const { registerScoringIpcHandlers } = require("./controllers/scoringController.cjs");
 const { registerSetupIpcHandlers } = require("./setup/setupController.cjs");
+const { registerIntelligenceHandlers } = require("./controllers/intelligenceController.cjs");
 
 const isDev = process.env.NODE_ENV === "development";
 

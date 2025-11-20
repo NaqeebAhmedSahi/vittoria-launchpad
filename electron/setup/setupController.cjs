@@ -585,6 +585,110 @@ sudo -u postgres psql -c "CREATE USER ${newUser.username} WITH PASSWORD '${newUs
     }
   });
 
+  /**
+   * Get current database connection info
+   */
+  ipcMain.handle('setup:getDatabaseInfo', async () => {
+    try {
+      const credentials = loadLocalCredentials();
+      
+      if (!credentials) {
+        return {
+          success: false,
+          connected: false,
+          message: 'No database connection configured'
+        };
+      }
+      
+      const { Client } = require('pg');
+      const client = new Client({
+        host: credentials.host,
+        port: parseInt(credentials.port),
+        user: credentials.username,
+        password: credentials.password,
+        database: credentials.database,
+        connectionTimeoutMillis: 5000
+      });
+      
+      try {
+        await client.connect();
+        
+        // Get database version
+        const versionResult = await client.query('SELECT version()');
+        const version = versionResult.rows[0].version;
+        
+        // Get database size
+        const sizeResult = await client.query(
+          `SELECT pg_size_pretty(pg_database_size($1)) as size`,
+          [credentials.database]
+        );
+        const size = sizeResult.rows[0].size;
+        
+        // Get table count
+        const tableCountResult = await client.query(
+          `SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'`
+        );
+        const tableCount = parseInt(tableCountResult.rows[0].count);
+        
+        await client.end();
+        
+        return {
+          success: true,
+          connected: true,
+          host: credentials.host,
+          port: credentials.port,
+          database: credentials.database,
+          username: credentials.username,
+          version: version.split(' ')[1], // Extract version number
+          size: size,
+          tableCount: tableCount
+        };
+      } catch (error) {
+        try { await client.end(); } catch (e) { /* ignore */ }
+        return {
+          success: false,
+          connected: false,
+          error: error.message
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        connected: false,
+        error: error.message
+      };
+    }
+  });
+
+  /**
+   * Disconnect database (delete credentials file)
+   */
+  ipcMain.handle('setup:disconnect', async () => {
+    try {
+      const filePath = getCredentialsFilePath();
+      
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log('[setupController] Credentials file deleted - database disconnected');
+      }
+      
+      // Clear credentials from memory
+      const { setCredentials } = require('../db/pgConnection.cjs');
+      setCredentials(null);
+      
+      return {
+        success: true,
+        message: 'Database disconnected successfully'
+      };
+    } catch (error) {
+      console.error('[setupController] Error disconnecting database:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
   console.log('[setupController] Setup IPC handlers registered');
 }
 

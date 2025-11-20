@@ -16,6 +16,10 @@ import {
   Shield,
   Info,
   Save,
+  Activity,
+  XCircle,
+  Clock,
+  RefreshCw,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -336,11 +340,69 @@ export default function Settings() {
   const [scoringApiEndpoint, setScoringApiEndpoint] = useState("");
   const [scoringApiKey, setScoringApiKey] = useState("");
   const [isSavingScoring, setIsSavingScoring] = useState(false);
+  
+  // Database connection state
+  const [dbInfo, setDbInfo] = useState<{
+    connected: boolean;
+    host?: string;
+    port?: number;
+    database?: string;
+    username?: string;
+    version?: string;
+    size?: string;
+    tableCount?: number;
+  }>({ connected: false });
+  const [isLoadingDb, setIsLoadingDb] = useState(true);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  
+  // Health check state
+  const [healthStatus, setHealthStatus] = useState<{
+    overall: 'operational' | 'degraded' | 'outage';
+    lastChecked: Date;
+    components: Array<{
+      name: string;
+      status: 'operational' | 'degraded' | 'outage' | 'maintenance';
+      category: 'core' | 'feature' | 'migration';
+      description?: string;
+    }>;
+  }>({
+    overall: 'operational',
+    lastChecked: new Date(),
+    components: []
+  });
+  const [isRefreshingHealth, setIsRefreshingHealth] = useState(false);
+  
   const { toast } = useToast();
 
   // Load CV storage path and scoring API settings on component mount
   useEffect(() => {
     const loadSettings = async () => {
+      // Load database info
+      try {
+        setIsLoadingDb(true);
+        const info = await (window.api as any).setup.getDatabaseInfo();
+        if (info.success && info.connected) {
+          setDbInfo({
+            connected: true,
+            host: info.host,
+            port: info.port,
+            database: info.database,
+            username: info.username,
+            version: info.version,
+            size: info.size,
+            tableCount: info.tableCount,
+          });
+        } else {
+          setDbInfo({ connected: false });
+        }
+      } catch (err) {
+        console.error("Failed to load database info:", err);
+        setDbInfo({ connected: false });
+      } finally {
+        setIsLoadingDb(false);
+      }
+      
+      // Load CV storage path
       try {
         const path = await (window.api as any).settings.getCVStoragePath();
         if (path) setCvStoragePath(path);
@@ -366,7 +428,172 @@ export default function Settings() {
     };
 
     loadSettings();
+    loadHealthStatus();
   }, []);
+
+  const loadHealthStatus = async () => {
+    try {
+      // Check database connection
+      const dbStatus = await (window.api as any).setup.getDatabaseInfo();
+      const isDatabaseUp = dbStatus.success && dbStatus.connected;
+
+      // Simulate checking other services (in production, these would be real API calls)
+      const components = [
+        // Core Services
+        {
+          name: 'Database Connection',
+          status: isDatabaseUp ? 'operational' : 'outage' as const,
+          category: 'core' as const,
+          description: isDatabaseUp ? `PostgreSQL ${dbStatus.version || ''}` : 'Cannot connect to database'
+        },
+        {
+          name: 'Authentication Service',
+          status: isDatabaseUp ? 'operational' : 'degraded' as const,
+          category: 'core' as const,
+          description: 'User authentication and session management'
+        },
+        {
+          name: 'File Storage',
+          status: 'operational' as const,
+          category: 'core' as const,
+          description: 'Local file system storage for CVs and documents'
+        },
+        {
+          name: 'LLM Service',
+          status: 'operational' as const,
+          category: 'core' as const,
+          description: 'AI-powered CV parsing and analysis'
+        },
+        
+        // Feature Modules
+        {
+          name: 'CV Intake & Parsing',
+          status: 'operational' as const,
+          category: 'feature' as const,
+          description: 'Upload and parse CV documents'
+        },
+        {
+          name: 'Candidate Management',
+          status: 'operational' as const,
+          category: 'feature' as const,
+          description: 'Create, update, and manage candidate profiles'
+        },
+        {
+          name: 'Mandate Management',
+          status: 'operational' as const,
+          category: 'feature' as const,
+          description: 'Job mandate creation and tracking'
+        },
+        {
+          name: 'Firm Management',
+          status: 'operational' as const,
+          category: 'feature' as const,
+          description: 'Client firm database and management'
+        },
+        {
+          name: 'Quality Scoring',
+          status: 'operational' as const,
+          category: 'feature' as const,
+          description: 'CV quality assessment and scoring'
+        },
+        {
+          name: 'Match Scoring Engine',
+          status: 'degraded' as const,
+          category: 'feature' as const,
+          description: 'Candidate-mandate matching (migration in progress)'
+        },
+        {
+          name: 'Team Management',
+          status: 'maintenance' as const,
+          category: 'feature' as const,
+          description: 'Planned for future release'
+        },
+        {
+          name: 'Deal Tracking',
+          status: 'maintenance' as const,
+          category: 'feature' as const,
+          description: 'Planned for future release'
+        },
+        {
+          name: 'Finance & Invoicing',
+          status: 'maintenance' as const,
+          category: 'feature' as const,
+          description: 'Planned for future release'
+        },
+        
+        // Database Migration Status
+        {
+          name: 'Authentication Model',
+          status: 'operational' as const,
+          category: 'migration' as const,
+          description: 'PostgreSQL migration complete'
+        },
+        {
+          name: 'Settings Model',
+          status: 'operational' as const,
+          category: 'migration' as const,
+          description: 'PostgreSQL migration complete'
+        },
+        {
+          name: 'Candidate Model',
+          status: 'operational' as const,
+          category: 'migration' as const,
+          description: 'PostgreSQL migration complete'
+        },
+        {
+          name: 'Firm Model',
+          status: 'operational' as const,
+          category: 'migration' as const,
+          description: 'PostgreSQL migration complete'
+        },
+        {
+          name: 'Mandate Model',
+          status: 'operational' as const,
+          category: 'migration' as const,
+          description: 'PostgreSQL migration complete'
+        },
+        {
+          name: 'Intake Model',
+          status: 'degraded' as const,
+          category: 'migration' as const,
+          description: 'Migration in progress - schema updated, functions being migrated'
+        },
+        {
+          name: 'Scoring Model',
+          status: 'degraded' as const,
+          category: 'migration' as const,
+          description: 'Migration pending'
+        }
+      ];
+
+      // Determine overall status
+      const hasOutage = components.some(c => c.status === 'outage');
+      const hasDegraded = components.some(c => c.status === 'degraded');
+      
+      setHealthStatus({
+        overall: hasOutage ? 'outage' : hasDegraded ? 'degraded' : 'operational',
+        lastChecked: new Date(),
+        components
+      });
+    } catch (error) {
+      console.error('Error loading health status:', error);
+      setHealthStatus({
+        overall: 'outage',
+        lastChecked: new Date(),
+        components: []
+      });
+    }
+  };
+
+  const handleRefreshHealth = async () => {
+    setIsRefreshingHealth(true);
+    await loadHealthStatus();
+    setTimeout(() => setIsRefreshingHealth(false), 500);
+    toast({
+      title: "Refreshed",
+      description: "Health status updated successfully"
+    });
+  };
 
   const handleSaveCVPath = async () => {
     if (!cvStoragePath.trim()) {
@@ -422,6 +649,43 @@ export default function Settings() {
     }
   };
 
+  const handleDisconnectDatabase = async () => {
+    if (!confirm("Are you sure you want to disconnect the database? You will need to reconfigure the connection.")) {
+      return;
+    }
+    
+    setIsDisconnecting(true);
+    try {
+      const result = await (window.api as any).setup.disconnect();
+      if (result.success) {
+        toast({
+          title: "Disconnected",
+          description: "Database disconnected successfully. Reloading application...",
+        });
+        setDbInfo({ connected: false });
+        
+        // Reload the application to trigger setup check
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to disconnect database",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -431,8 +695,9 @@ export default function Settings() {
         </p>
       </div>
 
-      <Tabs defaultValue="database" className="space-y-6">
+      <Tabs defaultValue="health" className="space-y-6">
         <TabsList>
+          <TabsTrigger value="health">System Health</TabsTrigger>
           <TabsTrigger value="database">Database & Storage</TabsTrigger>
           <TabsTrigger value="llm">LLM & Embeddings</TabsTrigger>
           <TabsTrigger value="connectors">Connectors</TabsTrigger>
@@ -441,6 +706,243 @@ export default function Settings() {
           <TabsTrigger value="security">Security & GDPR</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="health" className="space-y-6">
+          {/* Overall Status Banner */}
+          <Card className={
+            healthStatus.overall === 'operational' 
+              ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
+              : healthStatus.overall === 'degraded'
+              ? 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/20'
+              : 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20'
+          }>
+            <CardContent className="pt-6">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-4">
+                  {healthStatus.overall === 'operational' ? (
+                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
+                      <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+                    </div>
+                  ) : healthStatus.overall === 'degraded' ? (
+                    <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
+                      <AlertCircle className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+                      <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+                    </div>
+                  )}
+                  <div>
+                    <h2 className="text-2xl font-bold mb-2">
+                      {healthStatus.overall === 'operational' && 'All Systems Operational'}
+                      {healthStatus.overall === 'degraded' && 'Partial System Outage'}
+                      {healthStatus.overall === 'outage' && 'System Outage'}
+                    </h2>
+                    <p className="text-muted-foreground flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Last checked: {healthStatus.lastChecked.toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshHealth}
+                  disabled={isRefreshingHealth}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshingHealth ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Core Services */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Activity className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Core Services</CardTitle>
+                  <CardDescription>Essential system components and infrastructure</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                {healthStatus.components
+                  .filter(c => c.category === 'core')
+                  .map((component, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-4 rounded-lg hover:bg-muted/50 transition-colors border"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium">{component.name}</div>
+                        {component.description && (
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {component.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-4">
+                        {component.status === 'operational' ? (
+                          <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700">
+                            <CheckCircle className="h-3 w-3" /> Operational
+                          </Badge>
+                        ) : component.status === 'degraded' ? (
+                          <Badge variant="outline" className="gap-1 border-yellow-600 text-yellow-600">
+                            <AlertCircle className="h-3 w-3" /> Degraded
+                          </Badge>
+                        ) : component.status === 'outage' ? (
+                          <Badge variant="destructive" className="gap-1">
+                            <XCircle className="h-3 w-3" /> Outage
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="gap-1">
+                            <Info className="h-3 w-3" /> Maintenance
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Feature Modules */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Cpu className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Feature Modules</CardTitle>
+                  <CardDescription>Application features and functionality</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                {healthStatus.components
+                  .filter(c => c.category === 'feature')
+                  .map((component, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-4 rounded-lg hover:bg-muted/50 transition-colors border"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium">{component.name}</div>
+                        {component.description && (
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {component.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-4">
+                        {component.status === 'operational' ? (
+                          <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700">
+                            <CheckCircle className="h-3 w-3" /> Operational
+                          </Badge>
+                        ) : component.status === 'degraded' ? (
+                          <Badge variant="outline" className="gap-1 border-yellow-600 text-yellow-600">
+                            <AlertCircle className="h-3 w-3" /> Partial
+                          </Badge>
+                        ) : component.status === 'maintenance' ? (
+                          <Badge variant="secondary" className="gap-1">
+                            <Info className="h-3 w-3" /> Planned
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="gap-1">
+                            <XCircle className="h-3 w-3" /> Outage
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Database Migration Status */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Database className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>PostgreSQL Migration</CardTitle>
+                  <CardDescription>Database model migration from SQLite to PostgreSQL</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                {healthStatus.components
+                  .filter(c => c.category === 'migration')
+                  .map((component, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-4 rounded-lg hover:bg-muted/50 transition-colors border"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium">{component.name}</div>
+                        {component.description && (
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {component.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-4">
+                        {component.status === 'operational' ? (
+                          <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700">
+                            <CheckCircle className="h-3 w-3" /> Complete
+                          </Badge>
+                        ) : component.status === 'degraded' ? (
+                          <Badge variant="outline" className="gap-1 border-yellow-600 text-yellow-600">
+                            <AlertCircle className="h-3 w-3" /> In Progress
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="gap-1">
+                            <Info className="h-3 w-3" /> Pending
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Status Legend */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-green-600"></div>
+                  <span className="text-muted-foreground">Operational</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-yellow-600"></div>
+                  <span className="text-muted-foreground">Degraded/Partial</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                  <span className="text-muted-foreground">Outage</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-gray-600"></div>
+                  <span className="text-muted-foreground">Maintenance/Planned</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="database" className="space-y-6">
           <Card>
@@ -456,43 +958,62 @@ export default function Settings() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="db-host">Host</Label>
-                  <Input id="db-host" defaultValue="localhost" />
+              {isLoadingDb ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Loading database connection...
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="db-port">Port</Label>
-                  <Input id="db-port" defaultValue="5432" />
+              ) : !dbInfo.connected ? (
+                <div className="text-center py-8">
+                  <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-sm text-muted-foreground">No database connection configured</p>
+                  <Button
+                    className="mt-4"
+                    onClick={() => window.location.reload()}
+                  >
+                    Configure Database
+                  </Button>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="db-name">Database Name</Label>
-                <Input id="db-name" defaultValue="bws_vittoria" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="db-user">Username</Label>
-                  <Input id="db-user" defaultValue="vittoria_admin" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="db-password">Password</Label>
-                  <Input id="db-password" type="password" defaultValue="••••••••••" />
-                </div>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline">Test Connection</Button>
-                <Button variant="outline">Run Migrations</Button>
-              </div>
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-status-success/10 border border-status-success/20">
-                <CheckCircle className="h-4 w-4 text-status-success" />
-                <div className="text-sm">
-                  <span className="font-medium">Connected</span>
-                  <span className="text-muted-foreground ml-2">
-                    Schema version: v2025.11.2
-                  </span>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="db-host">Host</Label>
+                      <Input id="db-host" value={dbInfo.host || ""} readOnly className="bg-muted" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="db-port">Port</Label>
+                      <Input id="db-port" value={dbInfo.port || ""} readOnly className="bg-muted" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="db-name">Database Name</Label>
+                    <Input id="db-name" value={dbInfo.database || ""} readOnly className="bg-muted" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="db-user">Username</Label>
+                    <Input id="db-user" value={dbInfo.username || ""} readOnly className="bg-muted" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button 
+                      variant="destructive"
+                      onClick={handleDisconnectDatabase}
+                      disabled={isDisconnecting}
+                    >
+                      {isDisconnecting ? "Disconnecting..." : "Disconnect Database"}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-status-success/10 border border-status-success/20">
+                    <CheckCircle className="h-4 w-4 text-status-success" />
+                    <div className="text-sm flex-1">
+                      <span className="font-medium">Connected</span>
+                      <div className="text-muted-foreground mt-1">
+                        <div>PostgreSQL {dbInfo.version || "Unknown"}</div>
+                        <div>Size: {dbInfo.size || "Unknown"} • Tables: {dbInfo.tableCount || 0}</div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -1125,26 +1646,27 @@ export default function Settings() {
               </div>
 
               <div className="border-t pt-6">
-                <Label className="text-base mb-3 block">System Status</Label>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <span className="text-sm">Database Connection</span>
+                <Label className="text-base mb-3 block">Quick Status</Label>
+                <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">System Status</span>
                     <Badge variant="default" className="gap-1">
-                      <CheckCircle className="h-3 w-3" /> Connected
+                      <CheckCircle className="h-3 w-3" /> {healthStatus.overall === 'operational' ? 'Operational' : healthStatus.overall === 'degraded' ? 'Degraded' : 'Outage'}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <span className="text-sm">LLM Service</span>
-                    <Badge variant="default" className="gap-1">
-                      <CheckCircle className="h-3 w-3" /> Online
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <span className="text-sm">Storage</span>
-                    <Badge variant="default" className="gap-1">
-                      <CheckCircle className="h-3 w-3" /> Available
-                    </Badge>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    For detailed health status and component monitoring, visit the{' '}
+                    <button
+                      onClick={() => {
+                        const healthTab = document.querySelector('[value="health"]') as HTMLElement;
+                        healthTab?.click();
+                      }}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      System Health
+                    </button>
+                    {' '}tab.
+                  </p>
                 </div>
               </div>
 

@@ -10,6 +10,17 @@ let credentials = null;
  * Set PostgreSQL credentials (called during setup)
  */
 function setCredentials(creds) {
+  // Handle null/undefined to clear credentials
+  if (!creds) {
+    console.log('[pgConnection] Clearing credentials');
+    credentials = null;
+    if (pool) {
+      pool.end().catch(err => console.error('[pgConnection] Error closing pool:', err));
+      pool = null;
+    }
+    return;
+  }
+  
   credentials = {
     host: creds.host || 'localhost',
     port: parseInt(creds.port) || 5432,

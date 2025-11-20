@@ -161,6 +161,24 @@ declare global {
           tables?: Array<{ name: string; size: string; rows: number }>;
           error?: string;
         }>;
+        getDatabaseInfo(): Promise<{
+          success: boolean;
+          connected: boolean;
+          host?: string;
+          port?: number;
+          database?: string;
+          username?: string;
+          version?: string;
+          size?: string;
+          tableCount?: number;
+          error?: string;
+          message?: string;
+        }>;
+        disconnect(): Promise<{
+          success: boolean;
+          message?: string;
+          error?: string;
+        }>;
       };
       intake: {
         list(): Promise<IntakeDbRow[]>;

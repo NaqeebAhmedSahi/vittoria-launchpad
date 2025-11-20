@@ -1,80 +1,159 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Mic, Search } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Mic, Search, Settings } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { VoiceNote } from "@/types/intelligence";
+
+// Mock data
+const mockVoiceNotes = [
+  {
+    id: 'vn-001',
+    recordedAt: '2025-11-20 14:32',
+    source: 'Folder: /VoiceNotes',
+    status: 'Transcribed',
+    linkedEntities: 2,
+    duration: '3:45',
+  },
+  {
+    id: 'vn-002',
+    recordedAt: '2025-11-20 11:18',
+    source: 'Email: voice@vittoria.ai',
+    status: 'Parsed',
+    linkedEntities: 4,
+    duration: '5:22',
+  },
+  {
+    id: 'vn-003',
+    recordedAt: '2025-11-19 16:45',
+    source: 'Folder: /VoiceNotes',
+    status: 'Queued',
+    linkedEntities: 0,
+    duration: '2:15',
+  },
+  {
+    id: 'vn-004',
+    recordedAt: '2025-11-19 09:30',
+    source: 'Email: voice@vittoria.ai',
+    status: 'Transcribed',
+    linkedEntities: 1,
+    duration: '4:10',
+  },
+];
 
 export default function VoiceInbox() {
-  const [notes, setNotes] = useState<VoiceNote[]>([]);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  useEffect(() => {
-    loadNotes();
-  }, [statusFilter]);
+  const filteredNotes = mockVoiceNotes.filter((note) => {
+    const matchesSearch = note.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all" || note.status.toLowerCase() === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
-  const loadNotes = async () => {
-    try {
-      setLoading(true);
-      const data = await (window as any).electron.invoke("intelligence:get-voice-notes", { status: statusFilter || undefined });
-      setNotes(data);
-    } catch (error) {
-      console.error("Failed to load voice notes:", error);
-    } finally {
-      setLoading(false);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Parsed': return 'default';
+      case 'Transcribed': return 'secondary';
+      case 'Queued': return 'outline';
+      default: return 'outline';
     }
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
-      queued: "outline",
-      transcribed: "secondary",
-      parsed: "default"
-    };
-    return <Badge variant={variants[status] || "outline"}>{status}</Badge>;
-  };
-
-  if (loading) return <div className="space-y-6"><h1 className="text-2xl font-semibold">Loading...</h1></div>;
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2"><Mic className="h-6 w-6" />Voice Notes</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage voice recordings and transcripts</p>
+    <div className="space-y-6 p-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Mic className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">Voice Notes</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Transcribed and parsed voice recordings
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" onClick={() => navigate('/settings?tab=voice')}>
+          <Settings className="h-4 w-4 mr-2" />
+          Voice Settings
+        </Button>
       </div>
 
+      {/* Filters */}
+      <div className="flex gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search voice notes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="queued">Queued</SelectItem>
+            <SelectItem value="transcribed">Transcribed</SelectItem>
+            <SelectItem value="parsed">Parsed</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Voice Notes Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-4">
-            <Input placeholder="Filter by status..." value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-48" />
-          </div>
+          <CardTitle className="text-base">Incoming Voice Notes</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow><TableHead>ID</TableHead><TableHead>Recorded At</TableHead><TableHead>Source</TableHead><TableHead>Duration</TableHead><TableHead>Status</TableHead><TableHead>Linked</TableHead><TableHead>Action</TableHead></TableRow>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Recorded At</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-center">Linked Entities</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
             </TableHeader>
             <TableBody>
-              {notes.map((note) => (
-                <TableRow key={note.id}>
-                  <TableCell className="font-medium">{note.display_id}</TableCell>
-                  <TableCell>{new Date(note.recorded_at).toLocaleString()}</TableCell>
+              {filteredNotes.map((note) => (
+                <TableRow
+                  key={note.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => navigate(`/voice/${note.id}`)}
+                >
+                  <TableCell className="font-mono text-sm">{note.id}</TableCell>
+                  <TableCell className="text-sm">{note.recordedAt}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{note.source}</TableCell>
-                  <TableCell>{formatDuration(note.duration_seconds)}</TableCell>
-                  <TableCell>{getStatusBadge(note.status)}</TableCell>
-                  <TableCell>{note.linked_entity_count}</TableCell>
-                  <TableCell><Button size="sm" variant="outline" onClick={() => navigate(`/voice/${note.id}`)}>View</Button></TableCell>
+                  <TableCell className="text-sm">{note.duration}</TableCell>
+                  <TableCell>
+                    <Badge variant={getStatusColor(note.status) as any}>
+                      {note.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {note.linkedEntities > 0 ? (
+                      <Badge variant="outline">{note.linkedEntities}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm">
+                      View
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

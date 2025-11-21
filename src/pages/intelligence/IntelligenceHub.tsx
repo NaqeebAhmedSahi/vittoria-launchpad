@@ -3,9 +3,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Brain, TrendingUp, AlertTriangle, Target, BarChart } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Brain, TrendingUp, AlertTriangle, Target, BarChart, Info } from "lucide-react";
 import { TalentIntelligenceEngine } from "@/services/talentIntelligenceEngine";
 import { ModuleExplanationModal } from "@/components/intelligence/ModuleExplanationModal";
+import { SourceTransparencyPanel } from "@/features/bias-intelligence/SourceTransparencyPanel";
+import { CounterfactualModal } from "@/features/bias-intelligence/CounterfactualModal";
 import { useNavigate } from "react-router-dom";
 import { useState, useMemo } from "react";
 
@@ -16,25 +19,52 @@ export default function IntelligenceHub() {
   const navigate = useNavigate();
 
   const [sortBy, setSortBy] = useState("score");
+  const [biasRiskFilter, setBiasRiskFilter] = useState("all");
   const [moduleModalOpen, setModuleModalOpen] = useState(false);
   const [selectedModule, setSelectedModule] = useState<any>(null);
+  const [sourceTransparencyOpen, setSourceTransparencyOpen] = useState(false);
+  const [selectedInsightForSources, setSelectedInsightForSources] = useState<any>(null);
+  const [counterfactualOpen, setCounterfactualOpen] = useState(false);
+  const [selectedMandateForCounterfactual, setSelectedMandateForCounterfactual] = useState<string | null>(null);
+
+  // Mock bias risk scores for demonstration
+  const getBiasRisk = (id: string): 'low' | 'moderate' | 'high' => {
+    const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const risks: Array<'low' | 'moderate' | 'high'> = ['low', 'moderate', 'high'];
+    return risks[hash % 3];
+  };
+
+  const getBiasScoreData = (id: string) => {
+    const biasRisk = getBiasRisk(id);
+    const expertiseScore = biasRisk === 'low' ? 90 : biasRisk === 'moderate' ? 75 : 60;
+    const similarityScore = biasRisk === 'low' ? 60 : biasRisk === 'moderate' ? 80 : 95;
+    return { biasRisk, expertiseScore, similarityScore, biasRiskScore: similarityScore - expertiseScore };
+  };
 
   const sortedOpportunities = useMemo(() => {
-    return [...topOpportunities].sort((a, b) => {
+    let filtered = biasRiskFilter === 'all' 
+      ? [...topOpportunities]
+      : topOpportunities.filter(opp => getBiasRisk(opp.id) === biasRiskFilter);
+    
+    return filtered.sort((a, b) => {
       if (sortBy === "score") return (b.score || 0) - (a.score || 0);
       if (sortBy === "confidence") return b.confidence - a.confidence;
       return 0;
     });
-  }, [topOpportunities, sortBy]);
+  }, [topOpportunities, sortBy, biasRiskFilter]);
 
   const sortedRisks = useMemo(() => {
-    return [...topRisks].sort((a, b) => {
+    let filtered = biasRiskFilter === 'all'
+      ? [...topRisks]
+      : topRisks.filter(risk => getBiasRisk(risk.id) === biasRiskFilter);
+    
+    return filtered.sort((a, b) => {
       if (sortBy === "confidence") return b.confidence - a.confidence;
       const severityOrder = { high: 3, medium: 2, low: 1 };
       return (severityOrder[b.severity as keyof typeof severityOrder] || 0) - 
              (severityOrder[a.severity as keyof typeof severityOrder] || 0);
     });
-  }, [topRisks, sortBy]);
+  }, [topRisks, sortBy, biasRiskFilter]);
 
   const handleCandidateClick = (candidateId: string) => {
     navigate(`/candidates/${candidateId}`);
@@ -56,6 +86,25 @@ export default function IntelligenceHub() {
       case 'low': return <TrendingUp className="h-4 w-4 text-status-success" />;
       default: return <Brain className="h-4 w-4 text-muted-foreground" />;
     }
+  };
+
+  const getBiasRiskBadgeColor = (risk: string) => {
+    switch (risk) {
+      case 'low': return 'bg-green-100 text-green-800 border-green-200';
+      case 'moderate': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'high': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const handleViewSources = (insight: any) => {
+    setSelectedInsightForSources(insight);
+    setSourceTransparencyOpen(true);
+  };
+
+  const handleViewCounterfactual = (mandateId: string) => {
+    setSelectedMandateForCounterfactual(mandateId);
+    setCounterfactualOpen(true);
   };
 
   return (
@@ -123,75 +172,133 @@ export default function IntelligenceHub() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Top Candidate Opportunities</CardTitle>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="score">Sort by Score</SelectItem>
-                    <SelectItem value="confidence">Sort by Confidence</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select value={biasRiskFilter} onValueChange={setBiasRiskFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filter by bias risk" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Bias Risks</SelectItem>
+                      <SelectItem value="low">Low Risk</SelectItem>
+                      <SelectItem value="moderate">Moderate Risk</SelectItem>
+                      <SelectItem value="high">High Risk</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="score">Sort by Score</SelectItem>
+                      <SelectItem value="confidence">Sort by Confidence</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Insight</TableHead>
-                    <TableHead>Candidate</TableHead>
-                    <TableHead>Mandate</TableHead>
-                    <TableHead>Module</TableHead>
-                    <TableHead className="text-center">Score</TableHead>
-                    <TableHead className="text-center">Confidence</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedOpportunities.map((insight) => (
-                    <TableRow key={insight.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {getSeverityIcon(insight.severity)}
-                          <span className="text-foreground">{insight.title}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span 
-                          className="text-sm text-foreground hover:text-primary cursor-pointer transition-colors"
-                          onClick={() => handleCandidateClick(insight.id.split('-')[0])}
-                        >
-                          Candidate {insight.id.split('-')[0]}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span 
-                          className="text-sm text-foreground hover:text-primary cursor-pointer transition-colors"
-                          onClick={() => handleMandateClick('mandate-001')}
-                        >
-                          Mandate #001
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="outline" 
-                          className="cursor-pointer hover:bg-primary/10 transition-colors"
-                          onClick={() => handleModuleClick(insight)}
-                        >
-                          {insight.moduleName}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={insight.score && insight.score >= 75 ? "default" : "secondary"}>
-                          {insight.score || "—"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="text-sm text-muted-foreground">{insight.confidence}%</span>
-                      </TableCell>
+              <TooltipProvider>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Insight</TableHead>
+                      <TableHead>Candidate</TableHead>
+                      <TableHead>Mandate</TableHead>
+                      <TableHead>Module</TableHead>
+                      <TableHead className="text-center">Score</TableHead>
+                      <TableHead className="text-center">Confidence</TableHead>
+                      <TableHead className="text-center">Bias Risk</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedOpportunities.map((insight) => {
+                      const biasData = getBiasScoreData(insight.id);
+                      return (
+                        <TableRow key={insight.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              {getSeverityIcon(insight.severity)}
+                              <span className="text-foreground">{insight.title}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span 
+                              className="text-sm text-foreground hover:text-primary cursor-pointer transition-colors"
+                              onClick={() => handleCandidateClick(insight.id.split('-')[0])}
+                            >
+                              Candidate {insight.id.split('-')[0]}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span 
+                              className="text-sm text-foreground hover:text-primary cursor-pointer transition-colors"
+                              onClick={() => handleMandateClick('mandate-001')}
+                            >
+                              Mandate #001
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant="outline" 
+                              className="cursor-pointer hover:bg-primary/10 transition-colors"
+                              onClick={() => handleModuleClick(insight)}
+                            >
+                              {insight.moduleName}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant={insight.score && insight.score >= 75 ? "default" : "secondary"}>
+                              {insight.score || "—"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className="text-sm text-muted-foreground">{insight.confidence}%</span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge className={getBiasRiskBadgeColor(biasData.biasRisk)}>
+                                  {biasData.biasRisk}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <div className="space-y-2">
+                                  <p className="font-medium">Bias Risk Assessment</p>
+                                  <div className="space-y-1 text-xs">
+                                    <p>Expertise Score: {biasData.expertiseScore}</p>
+                                    <p>Similarity Score: {biasData.similarityScore}</p>
+                                    <p>Bias Risk Score: {biasData.biasRiskScore}</p>
+                                  </div>
+                                  {biasData.biasRisk === 'high' && (
+                                    <p className="text-xs text-orange-800 mt-2">
+                                      Similarity pressure is higher than expertise for this decision. Review reasoning before sharing with clients.
+                                    </p>
+                                  )}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            <button
+                              onClick={() => handleViewSources(insight)}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              View inputs
+                            </button>
+                            <button
+                              onClick={() => handleViewCounterfactual('mandate-001')}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              Counterfactual
+                            </button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TooltipProvider>
             </CardContent>
           </Card>
 
@@ -438,6 +545,21 @@ export default function IntelligenceHub() {
           summary={selectedModule.summary}
           open={moduleModalOpen}
           onOpenChange={setModuleModalOpen}
+        />
+      )}
+
+      {sourceTransparencyOpen && selectedInsightForSources && (
+        <SourceTransparencyPanel
+          insightId={selectedInsightForSources.id}
+          insightTitle={selectedInsightForSources.title}
+          onClose={() => setSourceTransparencyOpen(false)}
+        />
+      )}
+
+      {counterfactualOpen && selectedMandateForCounterfactual && (
+        <CounterfactualModal
+          mandateId={selectedMandateForCounterfactual}
+          onClose={() => setCounterfactualOpen(false)}
         />
       )}
     </div>

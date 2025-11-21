@@ -32,6 +32,7 @@ import MarketHiringWindow from "./pages/edge/MarketHiringWindow";
 import DealStructureOverview from "./pages/edge/DealStructureOverview";
 import FirmArchetypeMap from "./pages/edge/FirmArchetypeMap";
 import IntelligenceHub from "./pages/intelligence/IntelligenceHub";
+import BiasWatch from "./pages/intelligence/BiasWatch";
 import VoiceInbox from "./pages/voice/VoiceInbox";
 import VoiceNoteDetail from "./pages/voice/VoiceNoteDetail";
 import Settings from "./pages/Settings";
@@ -213,7 +214,8 @@ const App = () => {
               <Route path="/finance/exports" element={<AccountantExports />} />
               
               {/* Intelligence Routes */}
-              <Route path="/intelligence" element={<IntelligenceHub />} />
+                  <Route path="/intelligence" element={<IntelligenceHub />} />
+                  <Route path="/intelligence/bias-watch" element={<BiasWatch />} />
               
               {/* Voice Notes Routes */}
               <Route path="/voice" element={<VoiceInbox />} />

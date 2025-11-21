@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Shield } from "lucide-react";
 
 import {
   Card,
@@ -39,6 +40,7 @@ import {
 
 import { MandateFormDialog } from "@/components/MandateFormDialog";
 import { CandidateMatchModal } from "@/components/CandidateMatchModal";
+import { MandateBiasDrawer } from "@/features/bias-intelligence/MandateBiasDrawer";
 import { useToast } from "@/hooks/use-toast";
 
 // --- Types ---------------------------------------------------
@@ -110,6 +112,12 @@ export default function Mandates() {
   // Candidate Match Modal
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [matchModalMandate, setMatchModalMandate] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+
+  const [biasDrawerOpen, setBiasDrawerOpen] = useState(false);
+  const [biasDrawerMandate, setBiasDrawerMandate] = useState<{
     id: number;
     name: string;
   } | null>(null);
@@ -273,6 +281,11 @@ export default function Mandates() {
   const handleFindCandidates = (mandateId: number, mandateName: string) => {
     setMatchModalMandate({ id: mandateId, name: mandateName });
     setMatchModalOpen(true);
+  };
+
+  const handleOpenBiasIntelligence = (mandateId: number, mandateName: string) => {
+    setBiasDrawerMandate({ id: mandateId, name: mandateName });
+    setBiasDrawerOpen(true);
   };
 
   const handleRunScoring = async (mandateId: number, mandateName: string) => {
@@ -519,21 +532,21 @@ export default function Mandates() {
                             {mandate.seniority_min || "?"} -{" "}
                             {mandate.seniority_max || "?"}
                           </TableCell>
-                          <TableCell className="text-right space-x-1">
-                            {/* <Button
+                           <TableCell className="text-right space-x-1">
+                            <Button
                               variant="ghost"
                               size="icon"
-                              title="Run scoring"
+                              title="Bias Intelligence"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleRunScoring(
+                                handleOpenBiasIntelligence(
                                   mandate.id,
                                   mandate.name
                                 );
                               }}
                             >
-                              <Play className="h-4 w-4" />
-                            </Button> */}
+                              <Shield className="h-4 w-4 text-purple-600" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -675,6 +688,15 @@ export default function Mandates() {
           onClose={() => setMatchModalOpen(false)}
           mandateId={matchModalMandate.id}
           mandateName={matchModalMandate.name}
+        />
+      )}
+
+      {/* Bias Intelligence Drawer */}
+      {biasDrawerOpen && biasDrawerMandate && (
+        <MandateBiasDrawer
+          mandateId={biasDrawerMandate.id.toString()}
+          mandateName={biasDrawerMandate.name}
+          onClose={() => setBiasDrawerOpen(false)}
         />
       )}
     </>

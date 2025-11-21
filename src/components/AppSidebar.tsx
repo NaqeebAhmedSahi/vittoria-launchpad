@@ -20,6 +20,7 @@ import {
   Target,
   Calendar,
   BarChart,
+  AlertTriangle,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useState } from "react";
@@ -44,7 +45,15 @@ const navItems = [
       { name: "Personal Ledger", path: "/finance/personal/ledger", icon: FileText },
     ]
   },
-  { name: "Intelligence", path: "/intelligence", icon: Brain },
+  { 
+    name: "Intelligence", 
+    path: "/intelligence", 
+    icon: Brain,
+    submenu: [
+      { name: "Overview", path: "/intelligence", icon: Brain },
+      { name: "Bias Watch", path: "/intelligence/bias-watch", icon: AlertTriangle },
+    ]
+  },
   { name: "Voice Notes", path: "/voice", icon: Mic },
   { name: "Templates", path: "/templates", icon: FileText },
   { 
@@ -66,7 +75,7 @@ const navItems = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control"]);
+  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control", "/intelligence"]);
 
   const toggleExpand = (path: string) => {
     setExpandedItems(prev => 

@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import Dashboard from "./pages/Dashboard";
@@ -188,13 +188,17 @@ const App = () => {
   }
 
   // Show main app if authenticated
+  const RouterComponent: any = (typeof window !== "undefined" && window.location.protocol === "file:") ? HashRouter : BrowserRouter;
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
-          <AppLayout onSignOut={handleSignOut} currentUser={currentUser}>
+        {/* Router selection: HashRouter for file:// (packaged Electron), BrowserRouter for dev server */}
+        {/* RouterComponent is declared above so we can pick the correct router at runtime */}
+            <RouterComponent>
+              <AppLayout onSignOut={handleSignOut} currentUser={currentUser}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/intake" element={<Intake />} />
@@ -252,8 +256,8 @@ const App = () => {
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </AppLayout>
-        </BrowserRouter>
+            </AppLayout>
+          </RouterComponent>
       </TooltipProvider>
     </QueryClientProvider>
   );

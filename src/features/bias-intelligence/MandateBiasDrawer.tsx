@@ -71,8 +71,8 @@ export function MandateBiasDrawer({ mandateId, mandateName, onClose }: MandateBi
                         <div className="font-semibold">{candidate.similarityScore}</div>
                       </div>
                       <div className="flex items-center gap-2 justify-end">
-                        <Badge className={getBiasRiskColor(candidate.biasRisk)}>
-                          {candidate.biasRisk}
+                        <Badge className={`${getBiasRiskColor(candidate.biasRisk)} uppercase`}>
+                          {candidate.biasRisk.charAt(0)}
                         </Badge>
                         <Button
                           variant="ghost"

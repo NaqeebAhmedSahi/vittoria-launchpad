@@ -21,6 +21,7 @@ import {
   Calendar,
   BarChart,
   AlertTriangle,
+  Wand2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useState } from "react";
@@ -52,6 +53,10 @@ const navItems = [
     submenu: [
       { name: "Overview", path: "/intelligence", icon: Brain },
       { name: "Bias Watch", path: "/intelligence/bias-watch", icon: AlertTriangle },
+      { name: "Bias Demo", path: "/intelligence/bias-demo", icon: Shield },
+      { name: "Scoring Demo", path: "/intelligence/scoring-demo", icon: TrendingUp },
+      { name: "Integrated Demo", path: "/intelligence/integrated-demo", icon: Users },
+      { name: "Bias Wizard", path: "/intelligence/bias-wizard", icon: Wand2 },
     ]
   },
   { name: "Voice Notes", path: "/voice", icon: Mic },

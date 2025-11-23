@@ -7,6 +7,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CandidateFormDialog } from "@/components/CandidateFormDialog";
@@ -26,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getCandidateScoreDetails } from "@/services/candidateScoringIntegration";
 
 type UICandidate = {
   id: number;
@@ -119,6 +127,7 @@ export default function Candidates() {
   );
   const [candidateMandates, setCandidateMandates] = useState<any[]>([]);
   const [loadingMandates, setLoadingMandates] = useState(false);
+  const [candidateScores, setCandidateScores] = useState<Map<number, any>>(new Map());
   const selectedCandidateData = data.find(
     (c) => c.id === selectedCandidate
   );
@@ -153,6 +162,76 @@ export default function Candidates() {
     loadCandidates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Compute bias-aware scores for visible candidates
+  useEffect(() => {
+    const computeScores = async () => {
+      const scores = new Map();
+      for (const candidate of data) {
+        try {
+          // Build mock context for scoring (in production, fetch from DB)
+          const candidateData = {
+            id: candidate.id,
+            name: candidate.name,
+            sectors: candidate.sectors,
+            functions: candidate.functions,
+            firms: candidate.firm ? [candidate.firm] : [],
+            schools: [],
+            location: candidate.location,
+            skills: [],
+          };
+          
+          // Mock mandate (in production, compute for each active mandate)
+          const mockMandate = {
+            id: 1,
+            title: 'Mock Mandate',
+            requiredSectors: candidate.sectors.slice(0, 2),
+            requiredFunctions: candidate.functions.slice(0, 2),
+            requiredSkills: [],
+          };
+
+          // Mock match score (in production, fetch from candidate_mandates)
+          const mockMatchScore = {
+            candidate_id: candidate.id,
+            mandate_id: 1,
+            final_score: 0.7, // Mock base score
+            sector_score: 0.8,
+            function_score: 0.75,
+            asset_class_score: 0.7,
+            geography_score: 0.65,
+            seniority_score: 0.7,
+          };
+
+          const scoreDetail = getCandidateScoreDetails(candidateData, mockMandate, mockMatchScore);
+          
+          // Extract summary for display
+          const { summary } = scoreDetail;
+          
+          // Determine bias risk based on divergence
+          const divergence = Math.abs(summary.avgSimilarityScore - summary.avgExpertiseScore);
+          const biasRisk: 'high' | 'medium' | 'low' = 
+            divergence > 0.3 ? 'high' : 
+            divergence > 0.15 ? 'medium' : 
+            'low';
+
+          scores.set(candidate.id, {
+            expertiseScore: summary.avgExpertiseScore,
+            similarityScore: summary.avgSimilarityScore,
+            reliabilityScore: summary.avgReliabilityScore,
+            compositeScore: summary.compositeScore,
+            biasRisk: biasRisk,
+          });
+        } catch (error) {
+          console.error(`Failed to compute score for candidate ${candidate.id}:`, error);
+        }
+      }
+      setCandidateScores(scores);
+    };
+
+    if (data.length > 0) {
+      computeScores();
+    }
+  }, [data]);
 
   // Load mandates for selected candidate
   useEffect(() => {
@@ -294,6 +373,17 @@ export default function Candidates() {
           {/* Left: list + filters */}
           <Card className="flex-1">
             <CardHeader>
+              {/* High bias risk alert */}
+              {Array.from(candidateScores.values()).some(score => score?.biasRisk === "high") && (
+                <Alert className="border-amber-500/30 bg-amber-500/10 mb-4">
+                  <AlertDescription className="text-amber-600 dark:text-amber-400">
+                    ⚠️ <strong>Bias Alert:</strong> Some candidates have high similarity scores that may be 
+                    influencing their rankings. Hover over candidate names to see detailed score breakdowns 
+                    and ensure decisions are based on expertise match rather than affinity bias.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="flex items-center gap-4">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -401,6 +491,7 @@ export default function Candidates() {
                     <TableHead>Current Firm</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Bias Risk</TableHead>
                     <TableHead>Tags</TableHead>
                     <TableHead className="text-right">
                       Active Mandates
@@ -409,14 +500,75 @@ export default function Candidates() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredData.map((candidate) => (
+                  {filteredData.map((candidate) => {
+                    const scoreDetail = candidateScores.get(candidate.id);
+                    const biasRisk = scoreDetail?.biasRisk || "low";
+                    const expertise = scoreDetail?.expertiseScore || 0;
+                    const similarity = scoreDetail?.similarityScore || 0;
+                    const reliability = scoreDetail?.reliabilityScore || 0;
+
+                    return (
                     <TableRow
                       key={candidate.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => setSelectedCandidate(candidate.id)}
                     >
                       <TableCell className="font-medium">
-                        {candidate.name}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help">{candidate.name}</span>
+                            </TooltipTrigger>
+                            <TooltipContent className="w-64">
+                              <div className="space-y-2">
+                                <div className="font-semibold text-sm border-b pb-1">Score Breakdown</div>
+                                <div className="space-y-1 text-xs">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-muted-foreground">Expertise Match:</span>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-blue-500" 
+                                          style={{ width: `${expertise * 100}%` }}
+                                        />
+                                      </div>
+                                      <span className="font-medium w-8 text-right">{(expertise * 100).toFixed(0)}%</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-muted-foreground">Similarity Match:</span>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-amber-500" 
+                                          style={{ width: `${similarity * 100}%` }}
+                                        />
+                                      </div>
+                                      <span className="font-medium w-8 text-right">{(similarity * 100).toFixed(0)}%</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-muted-foreground">Source Reliability:</span>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-green-500" 
+                                          style={{ width: `${reliability * 100}%` }}
+                                        />
+                                      </div>
+                                      <span className="font-medium w-8 text-right">{(reliability * 100).toFixed(0)}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                {biasRisk === "high" && (
+                                  <div className="text-xs text-amber-600 dark:text-amber-400 mt-2 pt-2 border-t">
+                                    ⚠️ High similarity may be influencing ranking
+                                  </div>
+                                )}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </TableCell>
                       <TableCell>{candidate.title}</TableCell>
                       <TableCell>{candidate.firm}</TableCell>
@@ -434,6 +586,20 @@ export default function Candidates() {
                           }`}
                         >
                           {candidate.status || 'active'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs uppercase ${
+                            biasRisk === "high"
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                              : biasRisk === "medium"
+                              ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30"
+                              : "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30"
+                          }`}
+                        >
+                          {biasRisk.charAt(0)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -458,7 +624,8 @@ export default function Candidates() {
                         {candidate.lastUpdated}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  );
+                  })}
 
                   {!loading && filteredData.length === 0 && (
                     <TableRow>
@@ -478,31 +645,105 @@ export default function Candidates() {
           {/* Right: detail panel */}
           {selectedCandidate && selectedCandidateData && (
             <Card className="w-96">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle>{selectedCandidateData.name}</CardTitle>
-                    <div className="flex gap-2 mt-2">
-                      <Badge variant="secondary">
+              <CardHeader className="pb-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="break-words pr-2">{selectedCandidateData.name}</CardTitle>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <Badge variant="secondary" className="text-xs">
                         {selectedCandidateData.title}
                       </Badge>
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="text-xs">
                         {selectedCandidateData.firm}
                       </Badge>
+                      {candidateScores.get(selectedCandidate) && (
+                        <Badge
+                          variant="outline"
+                          className={`text-xs uppercase ${
+                            candidateScores.get(selectedCandidate)?.biasRisk === "high"
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                              : candidateScores.get(selectedCandidate)?.biasRisk === "medium"
+                              ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30"
+                              : "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30"
+                          }`}
+                        >
+                          {candidateScores.get(selectedCandidate)?.biasRisk?.charAt(0)}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setSelectedCandidate(null)}
+                    className="shrink-0"
                   >
                     ×
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4 text-sm">
+              <CardContent className="space-y-5 text-sm">
+                {/* Bias-aware score breakdown */}
+                {candidateScores.get(selectedCandidate) && (
+                  <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                      Match Score Breakdown
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between text-xs mb-1.5">
+                          <span className="text-muted-foreground">Expertise Match</span>
+                          <span className="font-medium">
+                            {(candidateScores.get(selectedCandidate)!.expertiseScore * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500" 
+                            style={{ width: `${candidateScores.get(selectedCandidate)!.expertiseScore * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs mb-1.5">
+                          <span className="text-muted-foreground">Similarity Match</span>
+                          <span className="font-medium">
+                            {(candidateScores.get(selectedCandidate)!.similarityScore * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-amber-500" 
+                            style={{ width: `${candidateScores.get(selectedCandidate)!.similarityScore * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs mb-1.5">
+                          <span className="text-muted-foreground">Source Reliability</span>
+                          <span className="font-medium">
+                            {(candidateScores.get(selectedCandidate)!.reliabilityScore * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500" 
+                            style={{ width: `${candidateScores.get(selectedCandidate)!.reliabilityScore * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    {candidateScores.get(selectedCandidate)?.biasRisk === "high" && (
+                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-3 pt-3 border-t leading-relaxed">
+                        ⚠️ Similarity score is unusually high relative to expertise. 
+                        Ensure ranking decisions prioritize domain fit over affinity signals.
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
                     Location
                   </div>
                   <div className="font-medium">
@@ -511,10 +752,10 @@ export default function Candidates() {
                 </div>
 
                 <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
                     Tags
                   </div>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {[
                       ...selectedCandidateData.sectors,
                       ...selectedCandidateData.functions,
@@ -531,16 +772,16 @@ export default function Candidates() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-muted/50">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">
                       Active Mandates
                     </div>
                     <div className="text-xl font-semibold">
                       {selectedCandidateData.mandates}
                     </div>
                   </div>
-                  <div className="p-3 rounded-lg bg-muted/50">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">
                       Last Updated
                     </div>
                     <div className="text-sm font-medium">
@@ -551,18 +792,18 @@ export default function Candidates() {
 
                 {/* Mandates List */}
                 {selectedCandidateData.mandates > 0 && (
-                  <div className="border-t pt-4">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                  <div className="border-t pt-5">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-3">
                       Associated Mandates
                     </div>
                     {loadingMandates ? (
                       <div className="text-sm text-muted-foreground">Loading mandates...</div>
                     ) : candidateMandates.length > 0 ? (
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         {candidateMandates.map((mandate: any) => (
-                          <div key={mandate.id} className="p-3 rounded-lg bg-muted/50 space-y-1">
-                            <div className="font-medium text-sm">{mandate.name}</div>
-                            <div className="flex flex-wrap gap-1">
+                          <div key={mandate.id} className="p-3 rounded-lg bg-muted/50 space-y-2">
+                            <div className="font-medium text-sm leading-relaxed break-words">{mandate.name}</div>
+                            <div className="flex flex-wrap gap-1.5">
                               {mandate.primary_sector && (
                                 <Badge variant="secondary" className="text-xs">
                                   {mandate.primary_sector}
@@ -593,11 +834,11 @@ export default function Candidates() {
                   </div>
                 )}
 
-                <div className="border-t pt-4">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                <div className="border-t pt-5">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
                     Notes
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     Add narrative notes, interview feedback, and internal
                     commentary here once the notes feature is wired up.
                   </p>

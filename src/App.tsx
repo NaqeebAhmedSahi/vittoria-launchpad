@@ -33,6 +33,10 @@ import DealStructureOverview from "./pages/edge/DealStructureOverview";
 import FirmArchetypeMap from "./pages/edge/FirmArchetypeMap";
 import IntelligenceHub from "./pages/intelligence/IntelligenceHub";
 import BiasWatch from "./pages/intelligence/BiasWatch";
+import BiasAwareDemo from "./pages/BiasAwareDemo";
+import ScoringFlowDemo from "./pages/ScoringFlowDemo";
+import IntegratedScoringDemo from "./pages/IntegratedScoringDemo";
+import { BiasScoringWizard } from "./components/BiasScoringWizard";
 import VoiceInbox from "./pages/voice/VoiceInbox";
 import VoiceNoteDetail from "./pages/voice/VoiceNoteDetail";
 import Settings from "./pages/Settings";
@@ -216,6 +220,18 @@ const App = () => {
               {/* Intelligence Routes */}
                   <Route path="/intelligence" element={<IntelligenceHub />} />
                   <Route path="/intelligence/bias-watch" element={<BiasWatch />} />
+                  <Route path="/intelligence/bias-demo" element={<BiasAwareDemo />} />
+                  <Route path="/intelligence/scoring-demo" element={<ScoringFlowDemo />} />
+                  <Route path="/intelligence/integrated-demo" element={<IntegratedScoringDemo />} />
+                  <Route path="/intelligence/bias-wizard" element={
+                    <div className="p-6">
+                      <BiasScoringWizard 
+                        mandateId="demo-mandate"
+                        mandateName="Demo Mandate - PE Associate"
+                        candidates={[]}
+                      />
+                    </div>
+                  } />
               
               {/* Voice Notes Routes */}
               <Route path="/voice" element={<VoiceInbox />} />

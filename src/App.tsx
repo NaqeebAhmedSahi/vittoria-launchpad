@@ -43,6 +43,14 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import SignIn from "./pages/SignIn";
 import Setup from "./pages/Setup";
+import SourceManagement from "./pages/SourceManagement";
+import SourceDirectory from "./pages/SourceDirectory";
+import SourceDetail from "./pages/SourceDetail";
+import SourceTagging from "./pages/SourceTagging";
+import HistoricalImport from "./pages/HistoricalImport";
+import MandateFeedback from "./pages/MandateFeedback";
+import OrgPatternOverview from "./pages/OrgPatternOverview";
+import MandateSimilarityDebug from "./pages/MandateSimilarityDebug";
 
 const queryClient = new QueryClient();
 
@@ -236,6 +244,16 @@ const App = () => {
                       />
                     </div>
                   } />
+              
+              {/* Similarity/Source Routes */}
+              <Route path="/admin/sources" element={<SourceDirectory />} />
+              <Route path="/admin/sources/manage" element={<SourceManagement />} />
+              <Route path="/admin/sources/tagging" element={<SourceTagging />} />
+              <Route path="/admin/sources/:id" element={<SourceDetail />} />
+              <Route path="/admin/similarity/org-pattern" element={<OrgPatternOverview />} />
+              <Route path="/admin/similarity/import-history" element={<HistoricalImport />} />
+              <Route path="/mandates/:id/feedback" element={<MandateFeedback />} />
+              <Route path="/admin/mandates/:id/similarity" element={<MandateSimilarityDebug />} />
               
               {/* Voice Notes Routes */}
               <Route path="/voice" element={<VoiceInbox />} />

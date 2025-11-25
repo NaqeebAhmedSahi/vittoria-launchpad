@@ -6,6 +6,8 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
 
 const { registerIntakeIpcHandlers } = require("./controllers/intakeController.cjs");
+const { registerSourceIpcHandlers } = require("./controllers/sourceController.cjs");
+const { registerRecommendationIpcHandlers } = require("./controllers/recommendationController.cjs");
 const { registerSettingsIpcHandlers } = require("./controllers/settingsController.cjs");
 const { registerCandidateIpcHandlers } = require("./controllers/candidateController.cjs");
 const { registerAuthIpcHandlers } = require("./controllers/authController.cjs");
@@ -13,6 +15,7 @@ const { registerFirmIpcHandlers } = require("./controllers/firmController.cjs");
 const { registerMandateIpcHandlers } = require("./controllers/mandateController.cjs");
 const { registerScoringIpcHandlers } = require("./controllers/scoringController.cjs");
 const { registerSetupIpcHandlers } = require("./setup/setupController.cjs");
+const { ensureAllTablesExist } = require("./setup/databaseInitializer.cjs");
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -67,9 +70,21 @@ app.whenReady().then(async () => {
     console.error('[main.cjs] Error initializing PostgreSQL:', error);
   }
   
+  // Ensure all database tables exist before registering IPC handlers
+  console.log('[main.cjs] Step 0.5: Ensuring all database tables exist...');
+  try {
+    await ensureAllTablesExist();
+    console.log('[main.cjs] All database tables verified/created successfully');
+  } catch (error) {
+    console.error('[main.cjs] Error ensuring database tables:', error);
+    console.log('[main.cjs] Continuing with IPC handler registration...');
+  }
+  
   // register IPC handlers before window loads
   console.log('[main.cjs] Step 1: Registering Setup IPC handlers...');
   registerSetupIpcHandlers();
+  registerSourceIpcHandlers();
+  registerRecommendationIpcHandlers();
   
   console.log('[main.cjs] Step 2: Registering Auth IPC handlers...');
   registerAuthIpcHandlers();

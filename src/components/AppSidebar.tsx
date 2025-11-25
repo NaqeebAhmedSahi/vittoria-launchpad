@@ -22,6 +22,9 @@ import {
   BarChart,
   AlertTriangle,
   Wand2,
+  Network,
+  GitBranch,
+  Database,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useState } from "react";
@@ -59,6 +62,18 @@ const navItems = [
       { name: "Bias Wizard", path: "/intelligence/bias-wizard", icon: Wand2 },
     ]
   },
+  { 
+    name: "Sources", 
+    path: "/admin/sources", 
+    icon: Network,
+    submenu: [
+      { name: "Source Directory", path: "/admin/sources", icon: Users },
+      { name: "Add Source", path: "/admin/sources/manage", icon: User },
+      { name: "Bulk Tagging", path: "/admin/sources/tagging", icon: GitBranch },
+      { name: "Org Pattern", path: "/admin/similarity/org-pattern", icon: TrendingUp },
+      { name: "Import History", path: "/admin/similarity/import-history", icon: Database },
+    ]
+  },
   { name: "Voice Notes", path: "/voice", icon: Mic },
   { name: "Templates", path: "/templates", icon: FileText },
   { 
@@ -80,7 +95,7 @@ const navItems = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control", "/intelligence"]);
+  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control", "/intelligence", "/admin/sources"]);
 
   const toggleExpand = (path: string) => {
     setExpandedItems(prev => 

@@ -261,7 +261,7 @@ async function runMigrations(client) {
   try {
     console.log('[databaseInitializer] Fixing table sequences...');
     
-    const tables = ['users', 'firms', 'mandates', 'candidates', 'intake_files', 'match_scores'];
+    const tables = ['users', 'firms', 'mandates', 'candidates', 'intake_files', 'match_scores', 'sources'];
     for (const table of tables) {
       await client.query(`
         SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE(MAX(id), 1), true) FROM ${table}
@@ -456,6 +456,19 @@ function getInlineSchema() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Sources table
+    CREATE TABLE IF NOT EXISTS sources (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(128) NOT NULL,
+      email VARCHAR(128),
+      role VARCHAR(64) NOT NULL,
+      organisation VARCHAR(128) NOT NULL,
+      sectors JSONB NOT NULL DEFAULT '[]',
+      geographies JSONB NOT NULL DEFAULT '[]',
+      seniority_level VARCHAR(64) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
     -- Indexes
     CREATE INDEX IF NOT EXISTS idx_mandates_firm_id ON mandates(firm_id);
     CREATE INDEX IF NOT EXISTS idx_mandates_status ON mandates(status);
@@ -506,7 +519,83 @@ function getInlineSchema() {
   `;
 }
 
+/**
+ * Ensure all tables exist (standalone function for app startup)
+ * This can be called independently without full schema initialization
+ */
+async function ensureAllTablesExist() {
+  console.log('[databaseInitializer] Checking if all tables exist...');
+  
+  const db = require('../db/pgConnection.cjs');
+  
+  try {
+    // Check if sources table exists
+    const sourcesTableCheck = await db.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+        AND table_name = 'sources'
+    `);
+    
+    if (sourcesTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating sources table...');
+      await db.query(`
+        CREATE TABLE sources (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(128) NOT NULL,
+          email VARCHAR(128),
+          role VARCHAR(64) NOT NULL,
+          organisation VARCHAR(128) NOT NULL,
+          sectors JSONB NOT NULL DEFAULT '[]',
+          geographies JSONB NOT NULL DEFAULT '[]',
+          seniority_level VARCHAR(64) NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+      console.log('[databaseInitializer] ✓ Sources table created');
+    } else {
+      console.log('[databaseInitializer] Sources table already exists');
+    }
+    
+    // Check if recommendation_events table exists
+    const recommendationTableCheck = await db.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+        AND table_name = 'recommendation_events'
+    `);
+    
+    if (recommendationTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating recommendation_events table...');
+      await db.query(`
+        CREATE TABLE recommendation_events (
+          id SERIAL PRIMARY KEY,
+          source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+          candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          mandate_id INTEGER NOT NULL REFERENCES mandates(id) ON DELETE CASCADE,
+          strength VARCHAR(20) NOT NULL CHECK (strength IN ('strong', 'neutral', 'weak')),
+          comment TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_recommendation_events_source_id ON recommendation_events(source_id);
+        CREATE INDEX IF NOT EXISTS idx_recommendation_events_candidate_id ON recommendation_events(candidate_id);
+        CREATE INDEX IF NOT EXISTS idx_recommendation_events_mandate_id ON recommendation_events(mandate_id);
+      `);
+      console.log('[databaseInitializer] ✓ Recommendation events table created');
+    } else {
+      console.log('[databaseInitializer] Recommendation events table already exists');
+    }
+    
+    console.log('[databaseInitializer] ✓ All tables verified');
+  } catch (error) {
+    console.error('[databaseInitializer] Error ensuring tables exist:', error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   createDatabase,
-  initializeSchema
+  initializeSchema,
+  ensureAllTablesExist
 };

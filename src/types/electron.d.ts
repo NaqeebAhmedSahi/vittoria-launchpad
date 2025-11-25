@@ -88,6 +88,19 @@ declare global {
   interface Window {
     api: {
       ping: () => string;
+      source: {
+        list(): Promise<{ success: boolean; sources?: any[]; error?: string }>;
+        getById(id: number): Promise<{ success: boolean; source?: any; org_pattern?: any; error?: string }>;
+        create(data: any): Promise<{ success: boolean; source?: any; error?: string }>;
+        getOrgPattern(): Promise<{ success: boolean; pattern?: any; error?: string }>;
+        importHistorical(rows: any[]): Promise<{ success: boolean; imported?: number; skipped?: number; errors?: string[]; error?: string }>;
+        bulkUpdate(updates: any[]): Promise<{ success: boolean; updated?: number; errors?: string[]; error?: string }>;
+      };
+      recommendation: {
+        create(data: { source_id: number; candidate_id: number; mandate_id: number; strength: string; comment?: string }): Promise<{ success: boolean; recommendation?: any; error?: string }>;
+        listByMandate(mandateId: number): Promise<{ success: boolean; recommendations?: any[]; error?: string }>;
+        listByCandidate(candidateId: number, mandateId: number): Promise<{ success: boolean; recommendations?: any[]; error?: string }>;
+      };
       setup: {
         isCompleted(): Promise<{ success: boolean; completed: boolean }>;
         checkPostgres(): Promise<{ success: boolean; installed: boolean; version?: string; error?: string }>;

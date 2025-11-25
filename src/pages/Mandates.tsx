@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Shield } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Shield, MessageSquare } from "lucide-react";
 
 import {
   Card,
@@ -95,6 +96,7 @@ export interface MandateFormValues {
 // -------------------------------------------------------------
 
 export default function Mandates() {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
@@ -532,7 +534,7 @@ export default function Mandates() {
                             {mandate.seniority_min || "?"} -{" "}
                             {mandate.seniority_max || "?"}
                           </TableCell>
-                           <TableCell className="text-right space-x-1">
+                          <TableCell className="text-right space-x-1">
                             <Button
                               variant="ghost"
                               size="icon"
@@ -546,6 +548,17 @@ export default function Mandates() {
                               }}
                             >
                               <Shield className="h-4 w-4 text-purple-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Feedback / Sources"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/mandates/${mandate.id}/feedback`);
+                              }}
+                            >
+                              <MessageSquare className="h-4 w-4 text-teal-600" />
                             </Button>
                             <Button
                               variant="ghost"

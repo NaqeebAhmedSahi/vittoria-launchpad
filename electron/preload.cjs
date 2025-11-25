@@ -2,6 +2,19 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("api", {
+  source: {
+    list: () => ipcRenderer.invoke("source:list"),
+    getById: (id) => ipcRenderer.invoke("source:getById", id),
+    create: (data) => ipcRenderer.invoke("source:create", data),
+    getOrgPattern: () => ipcRenderer.invoke("source:getOrgPattern"),
+    importHistorical: (rows) => ipcRenderer.invoke("source:importHistorical", rows),
+    bulkUpdate: (updates) => ipcRenderer.invoke("source:bulkUpdate", updates),
+  },
+  recommendation: {
+    create: (data) => ipcRenderer.invoke("recommendation:create", data),
+    listByMandate: (mandateId) => ipcRenderer.invoke("recommendation:listByMandate", mandateId),
+    listByCandidate: (candidateId, mandateId) => ipcRenderer.invoke("recommendation:listByCandidate", candidateId, mandateId),
+  },
   ping: () => "pong",
 
     // 🔹 Setup / PostgreSQL configuration

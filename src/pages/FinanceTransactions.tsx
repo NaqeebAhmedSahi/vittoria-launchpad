@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, DollarSign, TrendingUp, TrendingDown, Search, SquarePen, Trash2, X } from 'lucide-react';
+import { Plus, DollarSign, TrendingUp, TrendingDown, Search, SquarePen, Trash2, X, ArrowRightLeft, Info } from 'lucide-react';
 import FinanceTransactionFormDialog from '@/components/FinanceTransactionFormDialog';
 
 interface FinanceTransaction {
@@ -46,9 +46,25 @@ export default function FinanceTransactions() {
   const [loading, setLoading] = useState(true);
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [displayCurrency, setDisplayCurrency] = useState<string>('GBP');
   const [showFormDialog, setShowFormDialog] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinanceTransaction | undefined>(undefined);
   const [selectedTransaction, setSelectedTransaction] = useState<FinanceTransaction | null>(null);
+  const [showExchangeRates, setShowExchangeRates] = useState(false);
+
+  // Exchange rates (relative to GBP as base)
+  const exchangeRates: { [key: string]: number } = {
+    'GBP': 1.0,
+    'USD': 1.27,
+    'EUR': 1.17,
+    'CHF': 1.12,
+    'JPY': 189.5,
+    'AUD': 1.93,
+    'CAD': 1.71,
+    'INR': 105.8,
+    'AED': 4.66,
+    'SGD': 1.70,
+  };
 
   useEffect(() => {
     loadTransactions();
@@ -95,6 +111,41 @@ export default function FinanceTransactions() {
     }).format(amount);
   };
 
+  // Convert amount from original currency to display currency
+  const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string = displayCurrency): number => {
+    if (fromCurrency === toCurrency) return amount;
+    
+    // Convert to GBP first (base currency)
+    const amountInGBP = amount / (exchangeRates[fromCurrency] || 1);
+    // Then convert to target currency
+    const convertedAmount = amountInGBP * (exchangeRates[toCurrency] || 1);
+    
+    return convertedAmount;
+  };
+
+  // Format with conversion
+  const formatWithConversion = (amount: number, originalCurrency: string) => {
+    const convertedAmount = convertCurrency(amount, originalCurrency, displayCurrency);
+    return formatCurrency(convertedAmount, displayCurrency);
+  };
+
+  // Get currency symbol
+  const getCurrencySymbol = (currency: string): string => {
+    const symbols: { [key: string]: string } = {
+      'GBP': '£',
+      'USD': '$',
+      'EUR': '€',
+      'CHF': 'CHF',
+      'JPY': '¥',
+      'AUD': 'A$',
+      'CAD': 'C$',
+      'INR': '₹',
+      'AED': 'د.إ',
+      'SGD': 'S$',
+    };
+    return symbols[currency] || currency;
+  };
+
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'paid':
@@ -116,11 +167,14 @@ export default function FinanceTransactions() {
 
   const totalIncome = transactions
     .filter(t => t.transaction_type.toLowerCase().includes('income') || t.transaction_type.toLowerCase().includes('revenue'))
-    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    .reduce((sum, t) => sum + convertCurrency(Number(t.amount) || 0, t.currency, displayCurrency), 0);
 
   const totalExpense = transactions
     .filter(t => !t.transaction_type.toLowerCase().includes('income') && !t.transaction_type.toLowerCase().includes('revenue'))
-    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    .reduce((sum, t) => sum + convertCurrency(Number(t.amount) || 0, t.currency, displayCurrency), 0);
+
+  // Get unique currencies in transactions
+  const uniqueCurrencies = [...new Set(transactions.map(t => t.currency))].sort();
 
   return (
     <div className="p-6 space-y-6">
@@ -131,10 +185,29 @@ export default function FinanceTransactions() {
               <h1 className="text-3xl font-bold">Finance Transactions</h1>
               <p className="text-muted-foreground">Track income and expenses</p>
             </div>
-            <Button onClick={() => setShowFormDialog(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Transaction
-            </Button>
+            <div className="flex gap-2">
+              <Select value={displayCurrency} onValueChange={setDisplayCurrency}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GBP">GBP £</SelectItem>
+                  <SelectItem value="USD">USD $</SelectItem>
+                  <SelectItem value="EUR">EUR €</SelectItem>
+                  <SelectItem value="CHF">CHF</SelectItem>
+                  <SelectItem value="JPY">JPY ¥</SelectItem>
+                  <SelectItem value="AUD">AUD $</SelectItem>
+                  <SelectItem value="CAD">CAD $</SelectItem>
+                  <SelectItem value="INR">INR ₹</SelectItem>
+                  <SelectItem value="AED">AED</SelectItem>
+                  <SelectItem value="SGD">SGD $</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={() => setShowFormDialog(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                New Transaction
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3 mb-6">
@@ -145,8 +218,9 @@ export default function FinanceTransactions() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">
-                  {formatCurrency(totalIncome, 'GBP')}
+                  {formatCurrency(totalIncome, displayCurrency)}
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">All currencies converted to {displayCurrency}</p>
               </CardContent>
             </Card>
 
@@ -157,8 +231,9 @@ export default function FinanceTransactions() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">
-                  {formatCurrency(totalExpense, 'GBP')}
+                  {formatCurrency(totalExpense, displayCurrency)}
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">All currencies converted to {displayCurrency}</p>
               </CardContent>
             </Card>
 
@@ -169,11 +244,56 @@ export default function FinanceTransactions() {
               </CardHeader>
               <CardContent>
                 <div className={`text-2xl font-bold ${totalIncome - totalExpense >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency(totalIncome - totalExpense, 'GBP')}
+                  {formatCurrency(totalIncome - totalExpense, displayCurrency)}
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">All currencies converted to {displayCurrency}</p>
               </CardContent>
             </Card>
           </div>
+
+          {uniqueCurrencies.length > 1 && (
+            <div className="mb-4">
+              <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                    <p className="text-sm text-blue-900 dark:text-blue-100">
+                      <span className="font-medium">{uniqueCurrencies.length} currencies detected:</span>{' '}
+                      {uniqueCurrencies.map(curr => getCurrencySymbol(curr)).join(', ')}
+                      {' '}• All amounts converted to <span className="font-semibold">{displayCurrency}</span>
+                    </p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setShowExchangeRates(!showExchangeRates)}
+                    className="text-blue-700 hover:text-blue-900 dark:text-blue-300"
+                  >
+                    <Info className="w-4 h-4 mr-1" />
+                    {showExchangeRates ? 'Hide' : 'Show'} Rates
+                  </Button>
+                </div>
+                
+                {showExchangeRates && (
+                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-xs font-medium text-blue-900 dark:text-blue-100 mb-2">Exchange Rates (relative to {displayCurrency}):</p>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                      {uniqueCurrencies.filter(curr => curr !== displayCurrency).map(currency => (
+                        <div key={currency} className="text-xs bg-white dark:bg-blue-900 p-2 rounded border border-blue-200 dark:border-blue-700">
+                          <span className="font-medium">{currency}</span>
+                          <span className="text-muted-foreground mx-1">→</span>
+                          <span className="font-semibold">{(exchangeRates[displayCurrency] / exchangeRates[currency]).toFixed(4)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Note: Exchange rates are approximate and for reference only. All currencies are converted via GBP as base.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <Card>
             <CardHeader>
@@ -224,7 +344,8 @@ export default function FinanceTransactions() {
                       <TableHead>Description</TableHead>
                       <TableHead>Related To</TableHead>
                       <TableHead>Invoice #</TableHead>
-                      <TableHead>Amount</TableHead>
+                      <TableHead>Original Amount</TableHead>
+                      <TableHead>Amount ({displayCurrency})</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -242,7 +363,24 @@ export default function FinanceTransactions() {
                         <TableCell className="max-w-xs truncate">{transaction.description || '—'}</TableCell>
                         <TableCell>{transaction.firm_name || transaction.mandate_name || '—'}</TableCell>
                         <TableCell>{transaction.invoice_number || '—'}</TableCell>
-                        <TableCell className="font-medium">{formatCurrency(transaction.amount, transaction.currency)}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          <div className="flex items-center gap-2">
+                            {formatCurrency(transaction.amount, transaction.currency)}
+                            {transaction.currency !== displayCurrency && (
+                              <Badge variant="outline" className="text-xs">
+                                {transaction.currency}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {formatWithConversion(transaction.amount, transaction.currency)}
+                            {transaction.currency !== displayCurrency && (
+                              <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <Badge variant={getStatusColor(transaction.payment_status)}>
                             {transaction.payment_status}
@@ -287,9 +425,24 @@ export default function FinanceTransactions() {
 
                 {/* Amount */}
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Amount</label>
-                  <p className="text-2xl font-bold mt-1">{formatCurrency(selectedTransaction.amount, selectedTransaction.currency)}</p>
+                  <label className="text-sm font-medium text-muted-foreground">Original Amount</label>
+                  <p className="text-lg font-semibold mt-1">
+                    {formatCurrency(selectedTransaction.amount, selectedTransaction.currency)}
+                  </p>
                 </div>
+
+                {/* Converted Amount */}
+                {selectedTransaction.currency !== displayCurrency && (
+                  <div className="bg-muted/30 p-3 rounded-lg border">
+                    <label className="text-sm font-medium text-muted-foreground">Converted Amount ({displayCurrency})</label>
+                    <p className="text-2xl font-bold mt-1">
+                      {formatWithConversion(selectedTransaction.amount, selectedTransaction.currency)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Rate: 1 {selectedTransaction.currency} = {(exchangeRates[displayCurrency] / exchangeRates[selectedTransaction.currency]).toFixed(4)} {displayCurrency}
+                    </p>
+                  </div>
+                )}
 
                 {/* Date */}
                 <div>
@@ -371,6 +524,11 @@ export default function FinanceTransactions() {
                     <label className="text-sm font-medium text-muted-foreground">Tax Amount</label>
                     <p className="mt-1">
                       {formatCurrency(selectedTransaction.tax_amount, selectedTransaction.currency)}
+                      {selectedTransaction.currency !== displayCurrency && (
+                        <span className="text-muted-foreground text-sm ml-2">
+                          (≈ {formatWithConversion(selectedTransaction.tax_amount, selectedTransaction.currency)})
+                        </span>
+                      )}
                     </p>
                   </div>
                 )}

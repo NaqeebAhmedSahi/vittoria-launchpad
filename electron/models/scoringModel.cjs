@@ -152,21 +152,34 @@ function computeCvQuality(parsed) {
 }
 
 /**
- * Check completeness of required fields: name, current_title, current_firm, location
+ * Check completeness of required fields: name, current_title, current_firm, location, sectors, functions, asset_classes, geographies, seniority, skills
  */
 function computeCompletenessScore(parsed) {
   console.log("\n📋 1. Completeness Score:");
-  console.log("   Required Fields: name, current_title, current_firm, location");
+  console.log("   Required Fields: name, current_title, current_firm, location, sectors, functions, asset_classes, geographies, seniority, skills");
 
-  const requiredFields = [
+  // Basic required fields (strings)
+  const basicFields = [
     { name: "name", value: parsed.name },
     { name: "current_title", value: parsed.current_title },
     { name: "current_firm", value: parsed.current_firm },
     { name: "location", value: parsed.location },
+    { name: "seniority", value: parsed.seniority },
   ];
 
-  console.log("   Field Values:");
-  requiredFields.forEach((field) => {
+  // Array fields (professional context)
+  const arrayFields = [
+    { name: "sectors", value: parsed.sectors },
+    { name: "functions", value: parsed.functions },
+    { name: "asset_classes", value: parsed.asset_classes },
+    { name: "geographies", value: parsed.geographies },
+  ];
+
+  // Skills field (can be nested object or flat array)
+  const skillsField = { name: "skills", value: parsed.skills };
+  
+  console.log("   Basic Fields:");
+  basicFields.forEach((field) => {
     const isFilled =
       field.value !== undefined && field.value !== null && String(field.value).trim() !== "";
     const status = isFilled ? "✓" : "✗";
@@ -174,13 +187,55 @@ function computeCompletenessScore(parsed) {
     console.log(`     ${status} ${field.name}: ${displayValue}`);
   });
 
-  const filledFields = requiredFields.filter(
+  console.log("   Professional Context Fields (arrays):");
+  arrayFields.forEach((field) => {
+    const isFilled = Array.isArray(field.value) && field.value.length > 0;
+    const status = isFilled ? "✓" : "✗";
+    const displayValue = isFilled ? `[${field.value.length} items]` : "(empty or not array)";
+    console.log(`     ${status} ${field.name}: ${displayValue}`);
+  });
+
+  // Check skills (nested or flat array)
+  let skillsFilled = false;
+  if (Array.isArray(skillsField.value) && skillsField.value.length > 0) {
+    // Flat array of skills
+    skillsFilled = true;
+    console.log(`     ✓ ${skillsField.name}: [${skillsField.value.length} items - flat array]`);
+  } else if (skillsField.value && typeof skillsField.value === 'object') {
+    // Nested object with technical, domains, leadership
+    const technical = Array.isArray(skillsField.value.technical) ? skillsField.value.technical.length : 0;
+    const domains = Array.isArray(skillsField.value.domains) ? skillsField.value.domains.length : 0;
+    const leadership = Array.isArray(skillsField.value.leadership) ? skillsField.value.leadership.length : 0;
+    const totalSkills = technical + domains + leadership;
+    
+    if (totalSkills > 0) {
+      skillsFilled = true;
+      console.log(`     ✓ ${skillsField.name}: [${totalSkills} items - nested: ${technical} technical, ${domains} domains, ${leadership} leadership]`);
+    } else {
+      console.log(`     ✗ ${skillsField.name}: (empty nested object)`);
+    }
+  } else {
+    console.log(`     ✗ ${skillsField.name}: (empty or invalid)`);
+  }
+
+  const filledBasicFields = basicFields.filter(
     (field) =>
       field.value !== undefined && field.value !== null && String(field.value).trim() !== ""
   ).length;
 
-  const score = filledFields / requiredFields.length;
-  console.log(`   Score: ${filledFields}/${requiredFields.length} = ${score.toFixed(4)}`);
+  const filledArrayFields = arrayFields.filter(
+    (field) => Array.isArray(field.value) && field.value.length > 0
+  ).length;
+
+  const filledSkills = skillsFilled ? 1 : 0;
+
+  const totalFields = basicFields.length + arrayFields.length + 1; // +1 for skills
+  const totalFilled = filledBasicFields + filledArrayFields + filledSkills;
+
+  const score = totalFilled / totalFields;
+  console.log(`   Score: ${totalFilled}/${totalFields} = ${score.toFixed(4)}`);
+  console.log(`   Breakdown: ${filledBasicFields}/${basicFields.length} basic + ${filledArrayFields}/${arrayFields.length} arrays + ${filledSkills}/1 skills`);
+
 
   return score;
 }
@@ -882,7 +937,9 @@ async function getMatchScoresForCandidate(candidateId) {
 
   return result.rows.map((row) => ({
     ...row,
-    dimension_scores: JSON.parse(row.dimension_scores),
+    dimension_scores: typeof row.dimension_scores === 'string' 
+      ? JSON.parse(row.dimension_scores) 
+      : row.dimension_scores,
   }));
 }
 
@@ -924,7 +981,9 @@ async function getTopMatchesForMandate(mandateId, limit = 10) {
     },
     match_score: {
       final_score: row.final_score,
-      dimension_scores: JSON.parse(row.dimension_scores),
+      dimension_scores: typeof row.dimension_scores === 'string' 
+        ? JSON.parse(row.dimension_scores) 
+        : row.dimension_scores,
     },
   }));
 }
@@ -1159,7 +1218,9 @@ async function listMatchScoresForMandate(mandateId) {
     current_title: row.current_title,
     current_firm: row.current_firm,
     final_score: row.final_score,
-    dimension_scores: JSON.parse(row.dimension_scores),
+    dimension_scores: typeof row.dimension_scores === 'string' 
+      ? JSON.parse(row.dimension_scores) 
+      : row.dimension_scores,
     created_at: row.created_at,
   }));
 }
@@ -1195,7 +1256,9 @@ async function listMatchScoresForCandidate(candidateId) {
     firm_id: row.firm_id,
     firm_name: row.firm_name,
     final_score: row.final_score,
-    dimension_scores: JSON.parse(row.dimension_scores),
+    dimension_scores: typeof row.dimension_scores === 'string' 
+      ? JSON.parse(row.dimension_scores) 
+      : row.dimension_scores,
     created_at: row.created_at,
   }));
 }

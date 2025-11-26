@@ -3,6 +3,7 @@ const {
   listIntakeFiles,
   createIntakeFiles,
   updateIntakeStatus,
+  updateParsedJson,
   previewIntakeFile,
   handleCvUpload,
   createCandidateFromIntake,
@@ -20,6 +21,10 @@ function registerIntakeIpcHandlers() {
   ipcMain.handle("intake:updateStatus", async (_event, payload) => {
     const { id, status } = payload;
     return updateIntakeStatus(id, status);
+  });
+
+  ipcMain.handle("intake:updateParsedJson", async (_event, { intakeId, updatedJson, reScore }) => {
+    return updateParsedJson(intakeId, updatedJson, reScore);
   });
 
   ipcMain.handle("intake:preview", async (_event, id) => {

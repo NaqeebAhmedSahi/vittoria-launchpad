@@ -1,18 +1,26 @@
 import { Loader2 } from "lucide-react";
 import { createPortal } from "react-dom";
+import { Progress } from "@/components/ui/progress";
 
 type ParsingOverlayProps = {
   open: boolean;
   label?: string;
   sublabel?: string;
+  progress?: number; // 0-100 for OCR progress
 };
 
 export function ParsingOverlay({
   open,
   label = "Parsing CV...",
   sublabel = "Extracting text and generating structured JSON with AI",
+  progress,
 }: ParsingOverlayProps) {
   if (!open) return null;
+
+  // If progress is provided, update the sublabel
+  const displaySublabel = progress !== undefined 
+    ? `Extracting text using OCR technology... ${progress}%`
+    : sublabel;
 
   // Render at the very top of the DOM so it sits above navbar/layout
   return createPortal(
@@ -49,15 +57,21 @@ export function ParsingOverlay({
                   {label}
                 </p>
                 <p className="text-xs md:text-sm text-muted-foreground">
-                  {sublabel}
+                  {displaySublabel}
                 </p>
               </div>
             </div>
 
-            {/* Subtle progress shimmer */}
-            <div className="relative mt-2 h-1.5 w-40 md:w-52 overflow-hidden rounded-full bg-muted">
-              <div className="absolute inset-y-0 left-0 w-1/3 animate-[shimmer_1.4s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-            </div>
+            {/* Progress bar or shimmer */}
+            {progress !== undefined ? (
+              <div className="relative mt-2 w-40 md:w-52">
+                <Progress value={progress} className="h-1.5" />
+              </div>
+            ) : (
+              <div className="relative mt-2 h-1.5 w-40 md:w-52 overflow-hidden rounded-full bg-muted">
+                <div className="absolute inset-y-0 left-0 w-1/3 animate-[shimmer_1.4s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+              </div>
+            )}
           </div>
         </div>
       </div>

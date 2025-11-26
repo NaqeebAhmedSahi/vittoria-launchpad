@@ -26,11 +26,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Upload, FolderPlus, Search, FileText, Eye, Copy, Award, CheckCircle, XCircle } from "lucide-react";
+import { Upload, FolderPlus, Search, FileText, Eye, Copy, Award, CheckCircle, XCircle, Clock, Edit } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 // NEW: overlay spinner
 import { ParsingOverlay } from "@/components/ParsingOverlay";
+import { DragDropUploadDialog } from "@/components/DragDropUploadDialog";
+import { DeferCandidateDialog } from "@/components/DeferCandidateDialog";
+import { EditCvDialog } from "@/components/EditCvDialog";
 
 // Shape used by the UI
 type IntakeItem = {
@@ -54,6 +57,7 @@ const statusFilters = [
   "Needs review",
   "Approved",
   "Rejected",
+  "Deferred",
 ];
 
 function mapDbRowToItem(row: IntakeDbRow): IntakeItem {
@@ -91,6 +95,14 @@ export default function Intake() {
   const [candidateName, setCandidateName] = useState("");
   const [candidateSelectedFiles, setCandidateSelectedFiles] = useState<File[]>([]);
   const [isParsing, setIsParsing] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState<{ [intakeId: number]: number }>({});
+  const [currentParsingId, setCurrentParsingId] = useState<number | null>(null);
+  const [parsingStage, setParsingStage] = useState<"ocr" | "ai" | null>(null);
+  const [dragDropDialogOpen, setDragDropDialogOpen] = useState(false);
+  const [deferDialogOpen, setDeferDialogOpen] = useState(false);
+  const [deferCandidateItem, setDeferCandidateItem] = useState<IntakeItem | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editIntakeItem, setEditIntakeItem] = useState<IntakeItem | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -100,6 +112,36 @@ export default function Intake() {
 
   // Access API (cast to any to satisfy TS global augmentation ordering)
   const api = (window as any).api;
+
+  // Listen for OCR progress events
+  useEffect(() => {
+    const handleOcrProgress = (data: { intakeId: number; progress: number; status: string }) => {
+      console.log(`[Intake] OCR Progress - ID: ${data.intakeId}, Progress: ${data.progress}%, Status: ${data.status}`);
+      setOcrProgress((prev) => ({
+        ...prev,
+        [data.intakeId]: data.progress,
+      }));
+      
+      // When OCR completes, switch to AI stage
+      if (data.status === "complete" && data.progress >= 100) {
+        setParsingStage("ai");
+        // Clear progress after a short delay
+        setTimeout(() => {
+          setOcrProgress((prev) => {
+            const newProgress = { ...prev };
+            delete newProgress[data.intakeId];
+            return newProgress;
+          });
+        }, 500);
+      }
+    };
+
+    api.on("intake:ocr-progress", handleOcrProgress);
+
+    return () => {
+      api.off("intake:ocr-progress", handleOcrProgress);
+    };
+  }, [api]);
 
   // Load initial data from SQLite
   useEffect(() => {
@@ -115,6 +157,49 @@ export default function Intake() {
         });
       });
   }, [toast]);
+
+  // Handler for drag-drop dialog
+  const handleDragDropDialogFiles = async (files: File[]) => {
+    try {
+      const payload = await Promise.all(
+        files.map(async (file) => {
+          const buffer = await file.arrayBuffer();
+          
+          // Determine file type
+          let fileType = "DOC";
+          if (file.type.includes("pdf")) {
+            fileType = "PDF";
+          } else if (file.type.includes("image")) {
+            fileType = "IMAGE";
+          } else if (file.type.includes("word") || file.name.toLowerCase().endsWith(".docx")) {
+            fileType = "DOC";
+          }
+          
+          return {
+            fileName: file.name,
+            buffer: Array.from(new Uint8Array(buffer)),
+            type: fileType,
+            source: "Drag & drop dialog",
+            uploadedBy: "Admin",
+          };
+        })
+      );
+
+      const rows = await api.intake.addFiles(payload);
+      setData(rows.map(mapDbRowToItem));
+      toast({
+        title: "Files uploaded",
+        description: `${files.length} file(s) uploaded successfully`,
+      });
+    } catch (err) {
+      console.error("Upload error:", err);
+      toast({
+        title: "Upload failed",
+        description: String(err),
+        variant: "destructive",
+      });
+    }
+  };
 
   const filteredData = data.filter((item) => {
     const matchesStatus =
@@ -157,10 +242,21 @@ export default function Intake() {
       const payload = await Promise.all(
         Array.from(files).map(async (file) => {
           const buffer = await file.arrayBuffer();
+          
+          // Determine file type
+          let fileType = "DOC";
+          if (file.type.includes("pdf")) {
+            fileType = "PDF";
+          } else if (file.type.includes("image")) {
+            fileType = "IMAGE";
+          } else if (file.type.includes("word") || file.name.toLowerCase().endsWith(".docx")) {
+            fileType = "DOC";
+          }
+          
           return {
             fileName: file.name,
             buffer: Array.from(new Uint8Array(buffer)), // Convert to array for IPC
-            type: file.type.includes("pdf") ? "PDF" : "DOC",
+            type: fileType,
             source: "Manual upload",
             uploadedBy: "Admin",
           };
@@ -214,10 +310,21 @@ export default function Intake() {
       const payload = await Promise.all(
         candidateSelectedFiles.map(async (file) => {
           const buffer = await file.arrayBuffer();
+          
+          // Determine file type
+          let fileType = "DOC";
+          if (file.type.includes("pdf")) {
+            fileType = "PDF";
+          } else if (file.type.includes("image")) {
+            fileType = "IMAGE";
+          } else if (file.type.includes("word") || file.name.toLowerCase().endsWith(".docx")) {
+            fileType = "DOC";
+          }
+          
           return {
             fileName: file.name,
             buffer: Array.from(new Uint8Array(buffer)),
-            type: file.type.includes("pdf") ? "PDF" : "DOC",
+            type: fileType,
             source: "Manual upload",
             uploadedBy: "Admin",
             candidate: candidateName,
@@ -252,10 +359,21 @@ export default function Intake() {
       const payload = await Promise.all(
         Array.from(files).map(async (file) => {
           const buffer = await file.arrayBuffer();
+          
+          // Determine file type
+          let fileType = "DOC";
+          if (file.type.includes("pdf")) {
+            fileType = "PDF";
+          } else if (file.type.includes("image")) {
+            fileType = "IMAGE";
+          } else if (file.type.includes("word") || file.name.toLowerCase().endsWith(".docx")) {
+            fileType = "DOC";
+          }
+          
           return {
             fileName: file.name,
             buffer: Array.from(new Uint8Array(buffer)),
-            type: file.type.includes("pdf") ? "PDF" : "DOC",
+            type: fileType,
             source: "Manual upload",
             uploadedBy: "Admin",
           };
@@ -281,6 +399,7 @@ export default function Intake() {
   const handleParseAndShowJson = (item: IntakeItem) => {
     (async () => {
       setIsParsing(true);
+      setCurrentParsingId(item.id);
       try {
         if (item.status === "Parsed") {
           toast({
@@ -316,6 +435,7 @@ export default function Intake() {
         });
       } finally {
         setIsParsing(false);
+        setCurrentParsingId(null);
       }
     })();
   };
@@ -399,13 +519,15 @@ export default function Intake() {
   };
 
   const handleScoreCV = async (item: IntakeItem) => {
+    // Check if it's an image type
+    const isImageType = item.type === "IMAGE";
+    
+    // Always use parsing overlay, but track the stage
     setIsParsing(true);
+    setCurrentParsingId(item.id);
+    setParsingStage(isImageType ? "ocr" : "ai");
+    
     try {
-      toast({
-        title: "Scoring CV...",
-        description: "Evaluating quality and computing fit score",
-      });
-
       // Call the CV processing pipeline
       const result = await (window.api as any).intake.processCV(item.id);
 
@@ -421,6 +543,7 @@ export default function Intake() {
       refreshFromDb();
     } catch (err) {
       console.error("Scoring failed:", err);
+      
       toast({
         title: "Scoring failed",
         description: String(err),
@@ -428,6 +551,8 @@ export default function Intake() {
       });
     } finally {
       setIsParsing(false);
+      setCurrentParsingId(null);
+      setParsingStage(null);
     }
   };
 
@@ -479,6 +604,70 @@ export default function Intake() {
       console.error("Rejection failed:", err);
       toast({
         title: "Rejection failed",
+        description: String(err),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeferCandidate = (item: IntakeItem) => {
+    if (!item.candidateId) {
+      toast({
+        title: "No candidate",
+        description: "This intake file doesn't have an associated candidate",
+        variant: "destructive",
+      });
+      return;
+    }
+    setDeferCandidateItem(item);
+    setDeferDialogOpen(true);
+  };
+
+  const confirmDeferCandidate = async (reason: string, reminderDate: string | null) => {
+    if (!deferCandidateItem || !deferCandidateItem.candidateId) return;
+
+    try {
+      await (window.api as any).candidate.defer({
+        candidateId: deferCandidateItem.candidateId,
+        reason,
+        reminderDate,
+      });
+      toast({
+        title: "Candidate Deferred",
+        description: "Candidate status changed to DEFERRED",
+      });
+      refreshFromDb();
+    } catch (err) {
+      console.error("Deferral failed:", err);
+      toast({
+        title: "Deferral failed",
+        description: String(err),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditCV = async (item: IntakeItem) => {
+    try {
+      // Fetch the full intake record with parsed_json
+      const intakes = await (window.api as any).intake.list();
+      const fullIntake = intakes.find((i: any) => i.id === item.id);
+      
+      if (!fullIntake || !fullIntake.parsed_json) {
+        toast({
+          title: "Cannot Edit",
+          description: "This CV hasn't been parsed yet. Click 'Score CV' first.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setEditIntakeItem({ ...item, parsedJson: fullIntake.parsed_json });
+      setEditDialogOpen(true);
+    } catch (err) {
+      console.error("Error loading CV data:", err);
+      toast({
+        title: "Load Failed",
         description: String(err),
         variant: "destructive",
       });
@@ -540,7 +729,7 @@ export default function Intake() {
               ref={fileInputRef}
               onChange={handleFileUpload}
               multiple
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.webp"
               className="hidden"
             />
             <input
@@ -548,6 +737,9 @@ export default function Intake() {
               ref={folderInputRef}
               onChange={handleFolderUpload}
               multiple
+              // @ts-ignore - webkitdirectory is not in React types but works
+              webkitdirectory=""
+              directory=""
               className="hidden"
             />
 
@@ -560,6 +752,15 @@ export default function Intake() {
               >
                 <Upload className="h-4 w-4" />
                 Add Intake
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setDragDropDialogOpen(true)}
+              >
+                <Upload className="h-4 w-4" />
+                Drag & Drop
               </Button>
               <Button
                 size="sm"
@@ -699,6 +900,20 @@ export default function Intake() {
                             ? "View JSON"
                             : "Parse JSON"}
                         </Button>
+                        {(item.status === "Parsed" || item.qualityScore !== undefined) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs gap-1 border-blue-500 text-blue-600 hover:bg-blue-50"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditCV(item);
+                            }}
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                            Edit
+                          </Button>
+                        )}
                         {item.status === "Parsed" || item.qualityScore !== undefined ? (
                           <>
                             {!item.candidateId && (
@@ -741,6 +956,18 @@ export default function Intake() {
                                   <XCircle className="h-3.5 w-3.5" />
                                   Reject
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs gap-1 border-orange-500 text-orange-600 hover:bg-orange-50"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeferCandidate(item);
+                                  }}
+                                >
+                                  <Clock className="h-3.5 w-3.5" />
+                                  Defer
+                                </Button>
                               </>
                             )}
                           </>
@@ -766,9 +993,23 @@ export default function Intake() {
                   <TableRow>
                     <TableCell
                       colSpan={10}
-                      className="py-8 text-center text-sm text-muted-foreground"
+                      className="py-12 text-center"
                     >
-                      No files found with the current filters.
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                          <Upload className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground mb-1">
+                            No files found
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {searchQuery || selectedStatus !== "All" 
+                              ? "Try adjusting your filters or search query"
+                              : "Click 'Add Intake', 'Drag & Drop', or 'Add folder' to get started"}
+                          </p>
+                        </div>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )}
@@ -809,12 +1050,51 @@ export default function Intake() {
         </DialogContent>
       </Dialog>
 
-      {/* Full-screen parsing overlay */}
+      {/* Full-screen parsing overlay - shows OCR then AI stages */}
       <ParsingOverlay
         open={isParsing}
-        label="Parsing CV with AI..."
-        sublabel="Extracting entities, contact details, skills, and experience from the document"
+        label={
+          parsingStage === "ocr" 
+            ? "Extracting Text from Image..." 
+            : "Parsing CV with AI..."
+        }
+        sublabel={
+          parsingStage === "ocr"
+            ? "Using OCR technology to read the image"
+            : "Extracting entities, contact details, skills, and experience from the document"
+        }
+        progress={
+          parsingStage === "ocr" && currentParsingId !== null 
+            ? ocrProgress[currentParsingId] 
+            : undefined
+        }
       />
+
+      {/* Drag & Drop Upload Dialog */}
+      <DragDropUploadDialog
+        open={dragDropDialogOpen}
+        onOpenChange={setDragDropDialogOpen}
+        onFilesSelected={handleDragDropDialogFiles}
+      />
+
+      {/* Defer Candidate Dialog */}
+      <DeferCandidateDialog
+        open={deferDialogOpen}
+        onOpenChange={setDeferDialogOpen}
+        candidateName={deferCandidateItem?.candidate || "Unknown"}
+        onConfirm={confirmDeferCandidate}
+      />
+
+      {/* Edit CV Dialog */}
+      {editIntakeItem && (
+        <EditCvDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          intakeId={editIntakeItem.id}
+          parsedJson={(editIntakeItem as any).parsedJson}
+          onSave={refreshFromDb}
+        />
+      )}
     </div>
   );
 }

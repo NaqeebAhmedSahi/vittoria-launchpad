@@ -253,6 +253,36 @@ async function runMigrations(client) {
       console.log('[databaseInitializer] ✓ Added parsed_at column');
     }
     
+    // Check if ocr_progress column exists
+    const ocrProgressCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+        AND table_name = 'intake_files' 
+        AND column_name = 'ocr_progress'
+    `);
+    
+    if (ocrProgressCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Adding ocr_progress column to intake_files...');
+      await client.query(`ALTER TABLE intake_files ADD COLUMN ocr_progress INTEGER DEFAULT 0`);
+      console.log('[databaseInitializer] ✓ Added ocr_progress column');
+    }
+    
+    // Check if ocr_method column exists
+    const ocrMethodCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+        AND table_name = 'intake_files' 
+        AND column_name = 'ocr_method'
+    `);
+    
+    if (ocrMethodCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Adding ocr_method column to intake_files...');
+      await client.query(`ALTER TABLE intake_files ADD COLUMN ocr_method VARCHAR(50)`);
+      console.log('[databaseInitializer] ✓ Added ocr_method column');
+    }
+    
   } catch (error) {
     console.error('[databaseInitializer] Error adding intake_files columns:', error.message);
   }
@@ -441,6 +471,8 @@ function getInlineSchema() {
       json_candidate JSONB,
       is_encrypted BOOLEAN DEFAULT false,
       encryption_version VARCHAR(50),
+      ocr_progress INTEGER DEFAULT 0,
+      ocr_method VARCHAR(50),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -720,6 +752,12 @@ function getInlineSchema() {
     DROP TRIGGER IF EXISTS audit_candidates_trigger ON candidates;
     CREATE TRIGGER audit_candidates_trigger
       AFTER INSERT OR UPDATE OR DELETE ON candidates
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- Intake files audit trigger
+    DROP TRIGGER IF EXISTS audit_intake_files_trigger ON intake_files;
+    CREATE TRIGGER audit_intake_files_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON intake_files
       FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
     
     -- Teams audit trigger
@@ -1097,6 +1135,11 @@ async function ensureAllTablesExist() {
         AFTER INSERT OR UPDATE OR DELETE ON candidates
         FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
       
+      DROP TRIGGER IF EXISTS audit_intake_files_trigger ON intake_files;
+      CREATE TRIGGER audit_intake_files_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON intake_files
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+      
       DROP TRIGGER IF EXISTS audit_teams_trigger ON teams;
       CREATE TRIGGER audit_teams_trigger
         AFTER INSERT OR UPDATE OR DELETE ON teams
@@ -1123,6 +1166,16 @@ async function ensureAllTablesExist() {
         FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
     `);
     console.log('[databaseInitializer] ✓ Audit triggers configured');
+    
+    // Run migrations to add any missing columns
+    console.log('[databaseInitializer] Running migrations to add missing columns...');
+    const client = await db.getClient();
+    try {
+      await runMigrations(client);
+      console.log('[databaseInitializer] ✓ Migrations completed');
+    } finally {
+      client.release();
+    }
     
     console.log('[databaseInitializer] ✓ All tables verified');
   } catch (error) {

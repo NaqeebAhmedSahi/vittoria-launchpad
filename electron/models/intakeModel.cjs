@@ -9,6 +9,7 @@ const { v4: uuidv4 } = require("uuid");
 const { getCVStoragePath, getSetting } = require("./settingsModel.cjs");
 const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
+const ocrService = require("../services/ocrService.cjs");
 const { encryptFile, decryptFile } = require("../services/encryptionService.cjs");
 
 // pdfjs-dist for reading PDF annotations (link URIs)
@@ -255,10 +256,16 @@ async function createIntakeFiles(files) {
       fs.writeFileSync(destPath, buffer);
 
       // Attempt lightweight text extraction for name detection
+      // SKIP OCR for images during upload - will do it during Score CV action
       let detectedName = null;
       try {
         const lowerExt = ext.toLowerCase();
-        if (lowerExt.includes("pdf")) {
+        
+        // Check if it's an image file - skip name detection for images
+        if (ocrService.isImageFile(destPath)) {
+          console.log(`[createIntakeFiles] Image file detected: ${file.fileName}, skipping name detection (will use OCR during Score CV)`);
+          detectedName = null; // Will be filled during OCR scoring
+        } else if (lowerExt.includes("pdf")) {
           const parsed = await pdfParse(buffer);
           detectedName = detectCandidateName(parsed.text || "");
         } else if (lowerExt.includes("docx")) {
@@ -393,7 +400,9 @@ async function parseAndGenerateJson(id) {
   if (row.parsed_json) {
     console.log(`[parseAndGenerateJson] Using cached parsed_json`);
     try {
-      const cachedData = JSON.parse(row.parsed_json);
+      const cachedData = typeof row.parsed_json === 'string' 
+        ? JSON.parse(row.parsed_json) 
+        : row.parsed_json;
       console.log(
         "[parseAndGenerateJson] Cached data:",
         JSON.stringify(cachedData, null, 2)
@@ -438,16 +447,151 @@ async function parseAndGenerateJson(id) {
   // 1) Extract text + links/emails
   console.log(`[parseAndGenerateJson] Starting text extraction...`);
   try {
-    if (ext === ".pdf" || ext === ".pdf.enc") {
-      console.log(`[parseAndGenerateJson] Parsing PDF...`);
-      const parsed = await pdfParse(fileBuffer);
-      console.log(
-        `[parseAndGenerateJson] PDF parsed, extracted text length: ${
-          parsed.text?.length || 0
-        }`
+    // Check if it's an image file first
+    if (ocrService.isImageFile(row.file_path)) {
+      console.log(`[parseAndGenerateJson] Detected image file, using OCR...`);
+      
+      // Update database with OCR start
+      await query(
+        "UPDATE intake_files SET ocr_progress = $1, ocr_method = $2 WHERE id = $3",
+        [0, "OCR", id]
       );
+      
+      // Emit progress event to frontend
+      const { BrowserWindow } = require("electron");
+      const mainWindow = BrowserWindow.getAllWindows()[0];
+      if (mainWindow) {
+        mainWindow.webContents.send("intake:ocr-progress", {
+          intakeId: id,
+          progress: 0,
+          status: "starting"
+        });
+      }
+      
+      const ocrResult = await ocrService.extractText(row.file_path, {
+        onProgress: async (progress) => {
+          console.log(`[parseAndGenerateJson] OCR progress for intake ${id}: ${progress}%`);
+          
+          // Update database
+          await query(
+            "UPDATE intake_files SET ocr_progress = $1 WHERE id = $2",
+            [progress, id]
+          );
+          
+          // Emit to frontend
+          if (mainWindow) {
+            mainWindow.webContents.send("intake:ocr-progress", {
+              intakeId: id,
+              progress,
+              status: "processing"
+            });
+          }
+        }
+      });
+      
+      extractedText = ocrResult.text || "";
+      console.log(`[parseAndGenerateJson] OCR extraction complete: ${extractedText.length} chars`);
+      console.log(`[parseAndGenerateJson] OCR method: ${ocrResult.method}`);
+      
+      // Update database with completion
+      await query(
+        "UPDATE intake_files SET ocr_progress = $1, ocr_method = $2 WHERE id = $3",
+        [100, ocrResult.method || "OCR", id]
+      );
+      
+      // Emit completion to frontend
+      if (mainWindow) {
+        mainWindow.webContents.send("intake:ocr-progress", {
+          intakeId: id,
+          progress: 100,
+          status: "complete"
+        });
+      }
+      
+      // Extract links and emails from OCR text
+      const urlRegex = /(?:https?:\/\/|www\.)[\w\-\.@:\/?#=%&+~,;()\[\]\$'!]+/gi;
+      const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+      const urls = (extractedText.match(urlRegex) || []).map((s) => s.trim());
+      const emails = (extractedText.match(emailRegex) || []).map((s) => s.trim());
+      extractedLinks = Array.from(new Set([...urls, ...emails]));
+    } else if (ext === ".pdf" || ext === ".pdf.enc") {
+      console.log(`[parseAndGenerateJson] Parsing PDF...`);
+      
+      // First try to check if it's an image-based PDF
+      const isPdfScanned = await ocrService.isPdfImageBased(row.file_path);
+      
+      if (isPdfScanned) {
+        console.log(`[parseAndGenerateJson] PDF appears to be scanned, using OCR...`);
+        
+        // Update database with OCR start
+        await query(
+          "UPDATE intake_files SET ocr_progress = $1, ocr_method = $2 WHERE id = $3",
+          [0, "OCR", id]
+        );
+        
+        // Emit progress event to frontend
+        const { BrowserWindow } = require("electron");
+        const mainWindow = BrowserWindow.getAllWindows()[0];
+        if (mainWindow) {
+          mainWindow.webContents.send("intake:ocr-progress", {
+            intakeId: id,
+            progress: 0,
+            status: "starting"
+          });
+        }
+        
+        const ocrResult = await ocrService.extractText(row.file_path, {
+          onProgress: async (progress) => {
+            console.log(`[parseAndGenerateJson] OCR progress for intake ${id}: ${progress}%`);
+            
+            // Update database
+            await query(
+              "UPDATE intake_files SET ocr_progress = $1 WHERE id = $2",
+              [progress, id]
+            );
+            
+            // Emit to frontend
+            if (mainWindow) {
+              mainWindow.webContents.send("intake:ocr-progress", {
+                intakeId: id,
+                progress,
+                status: "processing"
+              });
+            }
+          }
+        });
+        
+        extractedText = ocrResult.text || "";
+        console.log(`[parseAndGenerateJson] OCR extraction complete: ${extractedText.length} chars`);
+        
+        // Update database with completion
+        await query(
+          "UPDATE intake_files SET ocr_progress = $1, ocr_method = $2 WHERE id = $3",
+          [100, ocrResult.method || "OCR", id]
+        );
+        
+        // Emit completion to frontend
+        if (mainWindow) {
+          mainWindow.webContents.send("intake:ocr-progress", {
+            intakeId: id,
+            progress: 100,
+            status: "complete"
+          });
+        }
+      } else {
+        console.log(`[parseAndGenerateJson] PDF has extractable text, using standard parser...`);
+        const parsed = await pdfParse(fileBuffer);
+        extractedText = parsed.text || "";
+        console.log(`[parseAndGenerateJson] PDF parsed, extracted text length: ${extractedText.length}`);
+        
+        // Mark as text extraction (not OCR)
+        await query(
+          "UPDATE intake_files SET ocr_progress = $1, ocr_method = $2 WHERE id = $3",
+          [100, "Text extraction", id]
+        );
+      }
 
-      extractedText = parsed.text || "";
+      extractedText = extractedText || "";
 
       try {
         console.log(
@@ -1116,7 +1260,7 @@ async function processParsedCv(intakeId, parsedCv) {
 
     try {
       const systemPrompt =
-        "ROLE: Candidate JSON Normalizer (deterministic)\nYou convert a parsed CV object into a STRICT candidate JSON matching the exact schema provided.\nReturn ONLY a single JSON object with the exact keys and types. No markdown, no comments.";
+        "ROLE: Candidate JSON Normalizer with Confidence Scoring\nYou convert a parsed CV object into a STRICT candidate JSON matching the exact schema provided.\nFor each field, provide a confidence score (0.0-1.0) and provenance explaining where the data came from.\nReturn ONLY a single JSON object with the exact keys and types. No markdown, no comments.";
 
       const schema = {
         name: "string",
@@ -1128,6 +1272,30 @@ async function processParsedCv(intakeId, parsedCv) {
         asset_classes: ["string"],
         geographies: ["string"],
         seniority: "string|null",
+        _metadata: {
+          field_confidence: {
+            name: "number (0.0-1.0)",
+            current_title: "number (0.0-1.0)",
+            current_firm: "number (0.0-1.0)",
+            location: "number (0.0-1.0)",
+            sectors: "number (0.0-1.0)",
+            functions: "number (0.0-1.0)",
+            asset_classes: "number (0.0-1.0)",
+            geographies: "number (0.0-1.0)",
+            seniority: "number (0.0-1.0)"
+          },
+          provenance: {
+            name: "string (source description)",
+            current_title: "string (source description)",
+            current_firm: "string (source description)",
+            location: "string (source description)",
+            sectors: "string (source description)",
+            functions: "string (source description)",
+            asset_classes: "string (source description)",
+            geographies: "string (source description)",
+            seniority: "string (source description)"
+          }
+        }
       };
 
       const userPrompt = `Using the parsed CV JSON below, produce a candidate JSON with this exact schema:
@@ -1140,10 +1308,34 @@ NORMALIZATION RULES:
 - Deduplicate and normalize capitalization (e.g., 'ECM', 'Equity').
 - Prefer values that reflect the current/latest role for current_title/current_firm.
 
+EXTRACTION RULES FOR SECTORS/FUNCTIONS/ASSET_CLASSES/GEOGRAPHIES:
+- **sectors**: Extract from work experience (e.g., Technology, Healthcare, Financial Services, Consumer Goods, Energy, Real Estate)
+- **functions**: Extract from job titles and responsibilities (e.g., M&A, Equity Capital Markets, Leveraged Finance, Private Equity, Restructuring, FP&A)
+- **asset_classes**: Extract from deal experience (e.g., Equity, Debt, Convertibles, Derivatives, Real Assets)
+- **geographies**: Extract from locations and regional focus (e.g., North America, Europe, APAC, EMEA)
+- Look through ALL work experience entries, not just the current role
+- Combine unique values across all roles
+- Use standard industry terminology
+
+CONFIDENCE SCORING (0.0-1.0):
+- **1.0**: Explicitly stated in CV (e.g., name in header, current title clearly labeled)
+- **0.8-0.9**: Strong inference from context (e.g., recent job title, clear patterns)
+- **0.6-0.7**: Moderate inference (e.g., derived from multiple sources, some ambiguity)
+- **0.4-0.5**: Weak inference (e.g., limited data, assumptions made)
+- **0.0-0.3**: Very uncertain or missing data
+
+PROVENANCE DESCRIPTION:
+Explain WHERE each field value came from. Examples:
+- "Extracted from CV header - personal information section"
+- "Most recent position in work experience (2023-present)"
+- "Inferred from job titles across 3 roles in financial services"
+- "Derived from work locations: New York, London"
+- "No explicit data - inferred from VP title and 8 years experience"
+
 PARSED CV (first 8000 chars):
 ${JSON.stringify(parsedCv, null, 2).slice(0, 8000)}
 
-Return ONLY the candidate JSON object.`;
+Return ONLY the candidate JSON object with confidence and provenance metadata.`;
 
       const aiResp = await llmAdapter.chat(
         [
@@ -1272,7 +1464,25 @@ Return ONLY the candidate JSON object.`;
       detectedCandidateName || "(empty)"
     );
 
-    if (qualityResult.score >= thresholds.good) {
+    // Re-score with complete candidate data including AI-extracted fields
+    console.log('\n🔄 Re-scoring CV with AI-extracted professional context...');
+    const enrichedCv = {
+      ...normalizedCv,
+      name: candidateJson.name,
+      current_title: candidateJson.current_title,
+      current_firm: candidateJson.current_firm,
+      location: candidateJson.location,
+      sectors: candidateJson.sectors || [],
+      functions: candidateJson.functions || [],
+      asset_classes: candidateJson.asset_classes || [],
+      geographies: candidateJson.geographies || [],
+      seniority: candidateJson.seniority,
+    };
+    
+    const finalQualityResult = computeCvQuality(enrichedCv);
+    console.log(`✅ Updated Quality Score: ${finalQualityResult.score.toFixed(4)} (${(finalQualityResult.score * 100).toFixed(2)}%)`);
+
+    if (finalQualityResult.score >= thresholds.good) {
       // createDraftCandidate uses pool-based query (outside client transaction)
       candidateId = await createDraftCandidate(candidateJson);
       console.log(
@@ -1280,6 +1490,21 @@ Return ONLY the candidate JSON object.`;
         candidateId
       );
       status = "Parsed";
+
+      // Merge candidateJson into parsedCv so all fields are available in parsed_json
+      const mergedParsedJson = {
+        ...parsedCv,
+        name: candidateJson.name,
+        current_title: candidateJson.current_title,
+        current_firm: candidateJson.current_firm,
+        location: candidateJson.location,
+        sectors: candidateJson.sectors || [],
+        functions: candidateJson.functions || [],
+        asset_classes: candidateJson.asset_classes || [],
+        geographies: candidateJson.geographies || [],
+        seniority: candidateJson.seniority,
+        _metadata: candidateJson._metadata,
+      };
 
       await client.query(
         `UPDATE intake_files 
@@ -1294,8 +1519,8 @@ Return ONLY the candidate JSON object.`;
          WHERE id = $8`,
         [
           status,
-          qualityResult.score,
-          JSON.stringify(parsedCv),
+          finalQualityResult.score,
+          JSON.stringify(mergedParsedJson),
           JSON.stringify(parsedCv),
           JSON.stringify(candidateJson),
           detectedCandidateName,
@@ -1305,6 +1530,21 @@ Return ONLY the candidate JSON object.`;
       );
     } else {
       status = "Needs review";
+
+      // Merge candidateJson into parsedCv for needs review status too
+      const mergedParsedJson = {
+        ...parsedCv,
+        name: candidateJson.name,
+        current_title: candidateJson.current_title,
+        current_firm: candidateJson.current_firm,
+        location: candidateJson.location,
+        sectors: candidateJson.sectors || [],
+        functions: candidateJson.functions || [],
+        asset_classes: candidateJson.asset_classes || [],
+        geographies: candidateJson.geographies || [],
+        seniority: candidateJson.seniority,
+        _metadata: candidateJson._metadata,
+      };
 
       await client.query(
         `UPDATE intake_files 
@@ -1318,8 +1558,8 @@ Return ONLY the candidate JSON object.`;
          WHERE id = $7`,
         [
           status,
-          qualityResult.score,
-          JSON.stringify(parsedCv),
+          finalQualityResult.score,
+          JSON.stringify(mergedParsedJson),
           JSON.stringify(parsedCv),
           JSON.stringify(candidateJson),
           detectedCandidateName,
@@ -1332,7 +1572,7 @@ Return ONLY the candidate JSON object.`;
 
     return {
       status,
-      qualityScore: qualityResult.score,
+      qualityScore: finalQualityResult.score,
       candidateId,
     };
   } catch (error) {
@@ -1429,7 +1669,9 @@ async function createCandidateFromIntake(intakeId) {
       );
     }
 
-    const parsedCv = JSON.parse(row.parsed_json);
+    const parsedCv = typeof row.parsed_json === 'string' 
+      ? JSON.parse(row.parsed_json) 
+      : row.parsed_json;
 
     const candidateId = await createDraftCandidate(parsedCv);
 
@@ -1452,11 +1694,107 @@ async function createCandidateFromIntake(intakeId) {
   }
 }
 
+/**
+ * Update parsed JSON for an intake file and optionally re-score
+ * @param {number} intakeId - Intake file ID
+ * @param {object} updatedJson - Updated parsed JSON data
+ * @param {boolean} reScore - Whether to re-run quality scoring
+ * @returns {Promise<object>} - Updated intake file with new score if applicable
+ */
+async function updateParsedJson(intakeId, updatedJson, reScore = true) {
+  const client = await getClient();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Get the current intake file to check if candidate already exists
+    const intakeResult = await client.query(
+      'SELECT * FROM intake_files WHERE id = $1',
+      [intakeId]
+    );
+    
+    if (intakeResult.rows.length === 0) {
+      throw new Error(`Intake file with ID ${intakeId} not found`);
+    }
+    
+    const intake = intakeResult.rows[0];
+    
+    // Add edit metadata
+    const editedJson = {
+      ...updatedJson,
+      _editHistory: [
+        ...(updatedJson._editHistory || []),
+        {
+          editedAt: new Date().toISOString(),
+          editedBy: 'user', // TODO: Replace with actual user ID when auth is implemented
+          reason: 'Manual correction'
+        }
+      ]
+    };
+
+    // Update the parsed JSON
+    await client.query(
+      'UPDATE intake_files SET parsed_json = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [JSON.stringify(editedJson), intakeId]
+    );
+
+    // Re-score if requested (but don't create a new candidate)
+    let qualityScore = intake.quality_score;
+    if (reScore) {
+      // Import scoring functions
+      const { computeCvQuality } = require("./scoringModel.cjs");
+      
+      // Normalize and score
+      const normalizedCv = normalizeParsedCvForScoring(editedJson);
+      const qualityResult = computeCvQuality(normalizedCv);
+      qualityScore = qualityResult.score;
+      
+      await client.query(
+        'UPDATE intake_files SET quality_score = $1 WHERE id = $2',
+        [qualityScore, intakeId]
+      );
+      
+      console.log(`[updateParsedJson] Re-scored CV, new quality: ${qualityScore}`);
+    }
+
+    // If a candidate already exists, update their data
+    if (intake.candidate_id) {
+      const candidateName = editedJson.candidate?.full_name || editedJson.name || intake.candidate;
+      
+      await client.query(
+        `UPDATE candidates 
+         SET name = $1, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $2`,
+        [candidateName, intake.candidate_id]
+      );
+      
+      console.log(`[updateParsedJson] Updated candidate ${intake.candidate_id} with new name: ${candidateName}`);
+    }
+
+    await client.query('COMMIT');
+    
+    // Return updated intake file
+    const updatedIntake = await client.query(
+      'SELECT * FROM intake_files WHERE id = $1',
+      [intakeId]
+    );
+    
+    return updatedIntake.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error("Error updating parsed JSON:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 // Final exports
 module.exports = {
   listIntakeFiles,
   createIntakeFiles,
   updateIntakeStatus,
+  updateParsedJson,
   previewIntakeFile,
   parseAndGenerateJson,
   initIntakeFilesTable,

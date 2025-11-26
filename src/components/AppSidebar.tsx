@@ -1,4 +1,36 @@
+<<<<<<< Updated upstream
 import { LayoutDashboard, Upload, Users, Building2, UsersRound, Briefcase, HandshakeIcon, DollarSign, FileText, Shield, Settings, ChevronRight, ChevronDown, TrendingUp, Receipt, User, Brain, Mic, Target, Calendar, BarChart, AlertTriangle, Wand2, Network, GitBranch, Database } from "lucide-react";
+=======
+import {
+  LayoutDashboard,
+  Upload,
+  Users,
+  Building2,
+  UsersRound,
+  Briefcase,
+  HandshakeIcon,
+  DollarSign,
+  FileText,
+  Shield,
+  Settings,
+  ChevronRight,
+  ChevronDown,
+  TrendingUp,
+  Receipt,
+  User,
+  Brain,
+  Mic,
+  Target,
+  Calendar,
+  BarChart,
+  AlertTriangle,
+  Wand2,
+  Network,
+  GitBranch,
+  Database,
+  CheckCircle,
+} from "lucide-react";
+>>>>>>> Stashed changes
 import { NavLink } from "@/components/NavLink";
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
@@ -6,6 +38,7 @@ import { useLocation } from "react-router-dom";
 const navItems = [
   { name: "Dashboard", path: "/", icon: LayoutDashboard },
   { name: "Intake", path: "/intake", icon: Upload },
+  { name: "Approvals", path: "/approvals", icon: CheckCircle },
   { name: "Candidates", path: "/candidates", icon: Users },
   { name: "Firms", path: "/firms", icon: Building2 },
   { name: "Teams", path: "/teams", icon: UsersRound },

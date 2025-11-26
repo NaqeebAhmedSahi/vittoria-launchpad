@@ -214,6 +214,7 @@ declare global {
         list(): Promise<IntakeDbRow[]>;
         addFiles(files: IntakeFileInput[]): Promise<IntakeDbRow[]>;
         updateStatus(id: number, status: string): Promise<IntakeDbRow>;
+        updateParsedJson(payload: { intakeId: number; updatedJson: any; reScore?: boolean }): Promise<IntakeDbRow>;
         preview(id: number): Promise<{
           fileName: string;
           mimeType: string;
@@ -229,6 +230,7 @@ declare global {
           update(payload: { candidateId: number; updates: Partial<Candidate> }): Promise<void>;
           approve(candidateId: number): Promise<void>;
           reject(candidateId: number): Promise<void>;
+          defer(payload: { candidateId: number; reason?: string; reminderDate?: string | null }): Promise<void>;
           search(searchTerm: string): Promise<Candidate[]>;
           delete(candidateId: number): Promise<void>;
           addMandate(candidateId: number, mandateId: number): Promise<{ success: boolean; mandateIds?: number[]; error?: string }>;

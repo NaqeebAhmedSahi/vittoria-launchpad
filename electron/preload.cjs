@@ -2,6 +2,19 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("api", {
+  // Event listeners
+  on: (channel, callback) => {
+    const validChannels = ["intake:ocr-progress"];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, (event, ...args) => callback(...args));
+    }
+  },
+  off: (channel, callback) => {
+    const validChannels = ["intake:ocr-progress"];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeListener(channel, callback);
+    }
+  },
   source: {
     list: () => ipcRenderer.invoke("source:list"),
     getById: (id) => ipcRenderer.invoke("source:getById", id),
@@ -85,6 +98,8 @@ contextBridge.exposeInMainWorld("api", {
     addFiles: (files) => ipcRenderer.invoke("intake:addFiles", files),
     updateStatus: (id, status) =>
       ipcRenderer.invoke("intake:updateStatus", { id, status }),
+    updateParsedJson: ({ intakeId, updatedJson, reScore }) =>
+      ipcRenderer.invoke("intake:updateParsedJson", { intakeId, updatedJson, reScore }),
     preview: (id) => ipcRenderer.invoke("intake:preview", id),
     parseAndGenerate: (id) => ipcRenderer.invoke("intake:parseAndGenerate", id),
     processCV: (intakeId) => ipcRenderer.invoke("intake:processCV", intakeId),
@@ -96,6 +111,7 @@ contextBridge.exposeInMainWorld("api", {
     update: (payload) => ipcRenderer.invoke("candidate:update", payload),
     approve: (candidateId) => ipcRenderer.invoke("candidate:approve", candidateId),
     reject: (candidateId) => ipcRenderer.invoke("candidate:reject", candidateId),
+    defer: ({ candidateId, reason, reminderDate }) => ipcRenderer.invoke("candidate:defer", { candidateId, reason, reminderDate }),
     search: (searchTerm) => ipcRenderer.invoke("candidate:search", searchTerm),
     delete: (candidateId) => ipcRenderer.invoke("candidate:delete", candidateId),
     create: (data) => ipcRenderer.invoke("candidate:create", data),

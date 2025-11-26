@@ -566,6 +566,54 @@ async function rejectCandidate(candidateId) {
   }
 }
 
+/**
+ * Defer a candidate - sets status to DEFERRED and updates intake file with reason (PostgreSQL)
+ */
+async function deferCandidate(candidateId, reason = null, reminderDate = null) {
+  const client = await getClient();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Update candidate status to DEFERRED
+    await client.query(
+      'UPDATE candidates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      ['DEFERRED', candidateId]
+    );
+
+    // Get intake file to update its metadata
+    const intakeResult = await client.query(
+      'SELECT id, parsed_json FROM intake_files WHERE candidate_id = $1',
+      [candidateId]
+    );
+
+    if (intakeResult.rows.length > 0) {
+      const intake = intakeResult.rows[0];
+      let parsedJson = intake.parsed_json || {};
+      
+      // Add defer metadata
+      parsedJson._deferral = {
+        reason: reason || 'Deferred for review',
+        deferredAt: new Date().toISOString(),
+        reminderDate: reminderDate
+      };
+
+      // Update intake file status and metadata
+      await client.query(
+        'UPDATE intake_files SET status = $1, parsed_json = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        ['Deferred', JSON.stringify(parsedJson), intake.id]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 // ============================================================
 // SQLITE VERSION (COMMENTED OUT)
 // ============================================================
@@ -886,7 +934,10 @@ async function getCandidateMandates(candidateId) {
     throw new Error(`Candidate with ID ${candidateId} not found`);
   }
   
-  return JSON.parse(result.rows[0].mandate_ids || '[]');
+  const mandateIds = result.rows[0].mandate_ids;
+  return typeof mandateIds === 'string' 
+    ? JSON.parse(mandateIds || '[]')
+    : (mandateIds || []);
 }
 
 // ============================================================
@@ -913,6 +964,7 @@ module.exports = {
   updateCandidate,
   approveCandidate,
   rejectCandidate,
+  deferCandidate,
   searchCandidates,
   deleteCandidate,
   addMandateToCandidate,

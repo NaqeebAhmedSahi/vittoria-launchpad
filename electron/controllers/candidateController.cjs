@@ -5,6 +5,7 @@ const {
   updateCandidate,
   approveCandidate,
   rejectCandidate,
+  deferCandidate,
   searchCandidates,
   deleteCandidate,
   createCandidate,
@@ -32,6 +33,10 @@ function registerCandidateIpcHandlers() {
 
   ipcMain.handle("candidate:reject", async (_event, candidateId) => {
     return rejectCandidate(candidateId);
+  });
+
+  ipcMain.handle("candidate:defer", async (_event, { candidateId, reason, reminderDate }) => {
+    return deferCandidate(candidateId, reason, reminderDate);
   });
 
   ipcMain.handle("candidate:search", async (_event, searchTerm) => {

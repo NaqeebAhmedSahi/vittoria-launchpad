@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import Intake from "./pages/Intake";
+import Approvals from "./pages/Approvals";
 import Candidates from "./pages/Candidates";
 import Mandates from "./pages/Mandates";
 import Firms from "./pages/Firms";
@@ -219,6 +220,7 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/intake" element={<Intake />} />
+              <Route path="/approvals" element={<Approvals />} />
               <Route path="/candidates" element={<Candidates />} />
               <Route path="/mandates" element={<Mandates />} />
               <Route path="/firms" element={<Firms />} />

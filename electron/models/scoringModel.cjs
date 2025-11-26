@@ -241,7 +241,7 @@ function computeCompletenessScore(parsed) {
 }
 
 /**
- * Compute experience score: % of experience entries with firm + title + dateFrom
+ * Compute experience score: % of experience entries with company + title + start_date
  */
 function computeExperienceScore(parsed) {
   console.log("\n💼 2. Experience Score:");
@@ -262,22 +262,29 @@ function computeExperienceScore(parsed) {
   }
 
   console.log(`   Total Experience Entries: ${parsed.experience.length}`);
-  console.log("   Required Fields per Entry: firm, title, dateFrom");
+  console.log("   Required Fields per Entry: company (or firm), title, start_date (or dateFrom)");
 
   let completeEntries = 0;
   parsed.experience.forEach((exp, index) => {
-    const hasFirm = exp.firm && String(exp.firm).trim() !== "";
+    // Support both 'company' and 'firm' field names
+    const companyValue = exp.company || exp.firm;
+    const hasCompany = companyValue && String(companyValue).trim() !== "";
+    
     const hasTitle = exp.title && String(exp.title).trim() !== "";
-    const hasDateFrom = exp.dateFrom && String(exp.dateFrom).trim() !== "";
-    const isComplete = hasFirm && hasTitle && hasDateFrom;
+    
+    // Support both 'start_date' and 'dateFrom' field names
+    const dateValue = exp.start_date || exp.dateFrom;
+    const hasStartDate = dateValue && String(dateValue).trim() !== "";
+    
+    const isComplete = hasCompany && hasTitle && hasStartDate;
 
     if (isComplete) completeEntries++;
 
     const status = isComplete ? "✓" : "✗";
     console.log(`     ${status} Entry ${index + 1}:`);
-    console.log(`       Firm: ${hasFirm ? exp.firm : "(empty)"}`);
+    console.log(`       Company: ${hasCompany ? companyValue : "(empty)"}`);
     console.log(`       Title: ${hasTitle ? exp.title : "(empty)"}`);
-    console.log(`       DateFrom: ${hasDateFrom ? exp.dateFrom : "(empty)"}`);
+    console.log(`       Start Date: ${hasStartDate ? dateValue : "(empty)"}`);
   });
 
   const score = completeEntries / parsed.experience.length;

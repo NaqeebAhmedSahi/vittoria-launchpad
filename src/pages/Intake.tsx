@@ -26,7 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Upload, FolderPlus, Search, FileText, Eye, Copy, Award, CheckCircle, XCircle, Clock, Edit } from "lucide-react";
+import { Upload, FolderPlus, Search, FileText, Eye, Copy, Award, CheckCircle, XCircle, Clock, Edit, X, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 // NEW: overlay spinner
@@ -103,6 +103,8 @@ export default function Intake() {
   const [deferCandidateItem, setDeferCandidateItem] = useState<IntakeItem | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editIntakeItem, setEditIntakeItem] = useState<IntakeItem | null>(null);
+  const [folderPreviewOpen, setFolderPreviewOpen] = useState(false);
+  const [folderFiles, setFolderFiles] = useState<File[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -355,9 +357,25 @@ export default function Intake() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    // Show preview dialog with all files
+    setFolderFiles(Array.from(files));
+    setFolderPreviewOpen(true);
+    
+    // Reset the input so the same folder can be selected again
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const handleConfirmFolderUpload = async () => {
+    if (folderFiles.length === 0) {
+      setFolderPreviewOpen(false);
+      return;
+    }
+
     try {
       const payload = await Promise.all(
-        Array.from(files).map(async (file) => {
+        folderFiles.map(async (file) => {
           const buffer = await file.arrayBuffer();
           
           // Determine file type
@@ -384,8 +402,12 @@ export default function Intake() {
       setData(rows.map(mapDbRowToItem));
       toast({
         title: "Folder uploaded",
-        description: `${files.length} file(s) from folder uploaded successfully`,
+        description: `${folderFiles.length} file(s) from folder uploaded successfully`,
       });
+      
+      // Close dialog and reset
+      setFolderPreviewOpen(false);
+      setFolderFiles([]);
     } catch (err) {
       console.error("Upload error:", err);
       toast({
@@ -394,6 +416,24 @@ export default function Intake() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleRemoveFolderFile = (index: number) => {
+    setFolderFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddMoreFiles = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = ".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.webp";
+    input.onchange = (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.files && target.files.length > 0) {
+        setFolderFiles(prev => [...prev, ...Array.from(target.files!)]);
+      }
+    };
+    input.click();
   };
 
   const handleParseAndShowJson = (item: IntakeItem) => {
@@ -662,7 +702,7 @@ export default function Intake() {
         return;
       }
 
-      setEditIntakeItem({ ...item, parsedJson: fullIntake.parsed_json });
+      setEditIntakeItem({ ...item, parsedJson: fullIntake.parsed_json } as any);
       setEditDialogOpen(true);
     } catch (err) {
       console.error("Error loading CV data:", err);
@@ -1095,6 +1135,84 @@ export default function Intake() {
           onSave={refreshFromDb}
         />
       )}
+
+      {/* Folder Files Preview Dialog */}
+      <Dialog open={folderPreviewOpen} onOpenChange={setFolderPreviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Review Folder Files</DialogTitle>
+            <DialogDescription>
+              Review and manage files before uploading. You can add more files or remove unwanted ones.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-hidden">
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-2">
+                {folderFiles.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No files selected
+                  </div>
+                ) : (
+                  folderFiles.map((file, index) => (
+                    <div
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(file.size / 1024).toFixed(1)} KB
+                            {file.type && ` • ${file.type.split('/')[1]?.toUpperCase() || 'File'}`}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive flex-shrink-0"
+                        onClick={() => handleRemoveFolderFile(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={handleAddMoreFiles}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add More Files
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setFolderPreviewOpen(false);
+                  setFolderFiles([]);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmFolderUpload}
+                disabled={folderFiles.length === 0}
+              >
+                Upload {folderFiles.length} {folderFiles.length === 1 ? 'File' : 'Files'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

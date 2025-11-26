@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield, MessageSquare } from "lucide-react";
+import { Shield, MessageSquare, BarChart3 } from "lucide-react";
 
 import {
   Card,
@@ -563,6 +563,17 @@ export default function Mandates() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              title="Outcome Log"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/mandates/${mandate.id}/outcomes`);
+                              }}
+                            >
+                              <BarChart3 className="h-4 w-4 text-amber-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               title="Find Candidates"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -680,6 +691,20 @@ export default function Mandates() {
                                         {sector}
                                       </Badge>
                                     ))}
+                                </div>
+                                <div className="mt-3 flex gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/mandates/${mandate.id}/outcomes`);
+                                    }}
+                                  >
+                                    <BarChart3 className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                                    Outcomes
+                                  </Button>
                                 </div>
                               </CardContent>
                             </Card>

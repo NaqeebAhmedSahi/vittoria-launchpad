@@ -55,8 +55,11 @@ import SourceDetail from "./pages/SourceDetail";
 import SourceTagging from "./pages/SourceTagging";
 import HistoricalImport from "./pages/HistoricalImport";
 import MandateFeedback from "./pages/MandateFeedback";
+import MandateOutcomeLog from "./pages/MandateOutcomeLog";
 import OrgPatternOverview from "./pages/OrgPatternOverview";
 import MandateSimilarityDebug from "./pages/MandateSimilarityDebug";
+import ReliabilityPage from "./pages/ReliabilityPage.tsx";
+import ReliabilitySourceDetail from "./pages/ReliabilitySourceDetail.tsx";
 
 const queryClient = new QueryClient();
 
@@ -225,7 +228,9 @@ const App = () => {
               <Route path="/people/:id" element={<PersonDetail />} />
               <Route path="/deals" element={<Deals />} />
               <Route path="/documents" element={<Documents />} />
-              
+
+              <Route path="/admin/reliability" element={<ReliabilityPage />} />
+
               {/* Finance Routes */}
               <Route path="/finance" element={<Finance />} />
               <Route path="/finance/transactions" element={<FinanceTransactions />} />
@@ -242,7 +247,7 @@ const App = () => {
               
               {/* Audit Route */}
               <Route path="/audit" element={<AuditLog />} />
-              
+
               {/* Intelligence Routes */}
                   <Route path="/intelligence" element={<IntelligenceHub />} />
                   <Route path="/intelligence/bias-watch" element={<BiasWatch />} />
@@ -267,6 +272,8 @@ const App = () => {
               <Route path="/admin/similarity/org-pattern" element={<OrgPatternOverview />} />
               <Route path="/admin/similarity/import-history" element={<HistoricalImport />} />
               <Route path="/mandates/:id/feedback" element={<MandateFeedback />} />
+              <Route path="/mandates/:id/outcomes" element={<MandateOutcomeLog />} />
+              <Route path="/admin/reliability/sources/:id" element={<ReliabilitySourceDetail />} />
               <Route path="/admin/mandates/:id/similarity" element={<MandateSimilarityDebug />} />
               
               {/* Voice Notes Routes */}

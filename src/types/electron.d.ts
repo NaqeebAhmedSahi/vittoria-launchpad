@@ -1,3 +1,12 @@
+import type {
+  OutcomeEvent,
+  OutcomeResult,
+  OutcomeStage,
+  SourceReliabilityDetailResponse,
+  SourceReliabilityListResponse,
+  MandateOutcomeLogResponse,
+} from "./reliability";
+
 export {};
 
 declare global {
@@ -100,6 +109,14 @@ declare global {
         create(data: { source_id: number; candidate_id: number; mandate_id: number; strength: string; comment?: string }): Promise<{ success: boolean; recommendation?: any; error?: string }>;
         listByMandate(mandateId: number): Promise<{ success: boolean; recommendations?: any[]; error?: string }>;
         listByCandidate(candidateId: number, mandateId: number): Promise<{ success: boolean; recommendations?: any[]; error?: string }>;
+      };
+      outcome: {
+        create(data: { candidate_id: number; mandate_id: number; stage: OutcomeStage; result: OutcomeResult; notes?: string }): Promise<{ success: boolean; outcome?: OutcomeEvent; error?: string }>;
+        listByMandate(mandateId: number): Promise<{ success: boolean; data?: MandateOutcomeLogResponse; error?: string }>;
+      };
+      reliability: {
+        listSources(): Promise<{ success: boolean } & SourceReliabilityListResponse>;
+        getSourceDetail(sourceId: number | string): Promise<{ success: boolean; detail?: SourceReliabilityDetailResponse; error?: string }>;
       };
       setup: {
         isCompleted(): Promise<{ success: boolean; completed: boolean }>;

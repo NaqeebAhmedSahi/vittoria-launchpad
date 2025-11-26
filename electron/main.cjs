@@ -8,6 +8,8 @@ require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
 const { registerIntakeIpcHandlers } = require("./controllers/intakeController.cjs");
 const { registerSourceIpcHandlers } = require("./controllers/sourceController.cjs");
 const { registerRecommendationIpcHandlers } = require("./controllers/recommendationController.cjs");
+const { registerOutcomeIpcHandlers } = require("./controllers/outcomeController.cjs");
+const { registerReliabilityIpcHandlers } = require("./controllers/reliabilityController.cjs");
 const { registerSettingsIpcHandlers } = require("./controllers/settingsController.cjs");
 const { registerCandidateIpcHandlers } = require("./controllers/candidateController.cjs");
 const { registerAuthIpcHandlers } = require("./controllers/authController.cjs");
@@ -91,7 +93,9 @@ app.whenReady().then(async () => {
   registerSetupIpcHandlers();
   registerSourceIpcHandlers();
   registerRecommendationIpcHandlers();
-  
+  registerOutcomeIpcHandlers();
+  registerReliabilityIpcHandlers();
+
   console.log('[main.cjs] Step 2: Registering Auth IPC handlers...');
   registerAuthIpcHandlers();
   

@@ -10,11 +10,11 @@ interface AppLayoutProps {
 
 export function AppLayout({ children, onSignOut, currentUser }: AppLayoutProps) {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen overflow-hidden bg-background flex flex-col">
       <TopBar onSignOut={onSignOut} currentUser={currentUser} />
-      <div className="flex flex-1">
+      <div className="flex flex-1 overflow-hidden">
         <AppSidebar />
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>
       </div>

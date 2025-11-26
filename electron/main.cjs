@@ -14,6 +14,12 @@ const { registerAuthIpcHandlers } = require("./controllers/authController.cjs");
 const { registerFirmIpcHandlers } = require("./controllers/firmController.cjs");
 const { registerMandateIpcHandlers } = require("./controllers/mandateController.cjs");
 const { registerScoringIpcHandlers } = require("./controllers/scoringController.cjs");
+const { registerTeamIpcHandlers } = require("./controllers/teamController.cjs");
+const { registerPeopleIpcHandlers } = require("./controllers/peopleController.cjs");
+const { registerEmploymentIpcHandlers } = require("./controllers/employmentController.cjs");
+const { registerDocumentIpcHandlers } = require("./controllers/documentController.cjs");
+const { registerFinanceIpcHandlers } = require("./controllers/financeController.cjs");
+const { registerAuditIpcHandlers } = require("./controllers/auditController.cjs");
 const { registerSetupIpcHandlers } = require("./setup/setupController.cjs");
 const { ensureAllTablesExist } = require("./setup/databaseInitializer.cjs");
 
@@ -107,7 +113,25 @@ app.whenReady().then(async () => {
   console.log('[main.cjs] Step 8: Registering Scoring IPC handlers...');
   registerScoringIpcHandlers();
   
-  console.log('[main.cjs] Step 9: Creating main window...');
+  console.log('[main.cjs] Step 9: Registering Team IPC handlers...');
+  registerTeamIpcHandlers();
+  
+  console.log('[main.cjs] Step 10: Registering People IPC handlers...');
+  registerPeopleIpcHandlers();
+  
+  console.log('[main.cjs] Step 11: Registering Employment IPC handlers...');
+  registerEmploymentIpcHandlers();
+  
+  console.log('[main.cjs] Step 12: Registering Document IPC handlers...');
+  registerDocumentIpcHandlers();
+  
+  console.log('[main.cjs] Step 13: Registering Finance IPC handlers...');
+  registerFinanceIpcHandlers();
+  
+  console.log('[main.cjs] Step 14: Registering Audit IPC handlers...');
+  registerAuditIpcHandlers();
+  
+  console.log('[main.cjs] Step 15: Creating main window...');
   createWindow();
   
   console.log('[main.cjs] ===== INITIALIZATION COMPLETE =====');

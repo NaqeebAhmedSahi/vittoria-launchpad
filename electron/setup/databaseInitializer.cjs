@@ -469,6 +469,102 @@ function getInlineSchema() {
       created_at TIMESTAMP DEFAULT NOW()
     );
 
+    -- Teams table
+    CREATE TABLE IF NOT EXISTS teams (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- People table
+    CREATE TABLE IF NOT EXISTS people (
+      id SERIAL PRIMARY KEY,
+      first_name VARCHAR(100),
+      last_name VARCHAR(100),
+      email VARCHAR(255) UNIQUE,
+      phone VARCHAR(50),
+      firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+      team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+      role VARCHAR(255),
+      linkedin_url VARCHAR(500),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Employments table
+    CREATE TABLE IF NOT EXISTS employments (
+      id SERIAL PRIMARY KEY,
+      person_id INTEGER REFERENCES people(id) ON DELETE CASCADE,
+      firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+      team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+      job_title VARCHAR(255),
+      start_date TIMESTAMP,
+      end_date TIMESTAMP,
+      status VARCHAR(50) DEFAULT 'Active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Documents table
+    CREATE TABLE IF NOT EXISTS documents (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      file_path VARCHAR(1000) NOT NULL,
+      file_type VARCHAR(100),
+      file_size INTEGER,
+      category VARCHAR(100),
+      tags TEXT[],
+      uploaded_by INTEGER REFERENCES people(id) ON DELETE SET NULL,
+      related_entity_type VARCHAR(50),
+      related_entity_id INTEGER,
+      firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+      mandate_id INTEGER REFERENCES mandates(id) ON DELETE CASCADE,
+      candidate_id INTEGER REFERENCES candidates(id) ON DELETE CASCADE,
+      is_confidential BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Finance Transactions table
+    CREATE TABLE IF NOT EXISTS finance_transactions (
+      id SERIAL PRIMARY KEY,
+      transaction_type VARCHAR(50) NOT NULL,
+      category VARCHAR(100),
+      amount DECIMAL(15, 2) NOT NULL,
+      currency VARCHAR(10) DEFAULT 'GBP',
+      description TEXT,
+      transaction_date DATE NOT NULL,
+      firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+      mandate_id INTEGER REFERENCES mandates(id) ON DELETE CASCADE,
+      candidate_id INTEGER REFERENCES candidates(id) ON DELETE CASCADE,
+      invoice_number VARCHAR(100),
+      payment_status VARCHAR(50) DEFAULT 'Pending',
+      payment_method VARCHAR(50),
+      payment_date DATE,
+      tax_amount DECIMAL(15, 2),
+      notes TEXT,
+      created_by INTEGER REFERENCES people(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Audit Log table
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id SERIAL PRIMARY KEY,
+      entity_type VARCHAR(100) NOT NULL,
+      entity_id INTEGER NOT NULL,
+      action VARCHAR(50) NOT NULL,
+      performed_by INTEGER REFERENCES people(id) ON DELETE SET NULL,
+      changes JSONB,
+      ip_address VARCHAR(45),
+      user_agent TEXT,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Indexes
     CREATE INDEX IF NOT EXISTS idx_mandates_firm_id ON mandates(firm_id);
     CREATE INDEX IF NOT EXISTS idx_mandates_status ON mandates(status);
@@ -478,6 +574,29 @@ function getInlineSchema() {
     CREATE INDEX IF NOT EXISTS idx_match_scores_candidate_id ON match_scores(candidate_id);
     CREATE INDEX IF NOT EXISTS idx_match_scores_mandate_id ON match_scores(mandate_id);
     CREATE INDEX IF NOT EXISTS idx_match_scores_final_score ON match_scores(final_score DESC);
+    CREATE INDEX IF NOT EXISTS idx_teams_firm_id ON teams(firm_id);
+    CREATE INDEX IF NOT EXISTS idx_people_firm_id ON people(firm_id);
+    CREATE INDEX IF NOT EXISTS idx_people_team_id ON people(team_id);
+    CREATE INDEX IF NOT EXISTS idx_people_email ON people(email);
+    CREATE INDEX IF NOT EXISTS idx_employments_person_id ON employments(person_id);
+    CREATE INDEX IF NOT EXISTS idx_employments_firm_id ON employments(firm_id);
+    CREATE INDEX IF NOT EXISTS idx_employments_team_id ON employments(team_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_uploaded_by ON documents(uploaded_by);
+    CREATE INDEX IF NOT EXISTS idx_documents_firm_id ON documents(firm_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_mandate_id ON documents(mandate_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_candidate_id ON documents(candidate_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);
+    CREATE INDEX IF NOT EXISTS idx_documents_related_entity ON documents(related_entity_type, related_entity_id);
+    CREATE INDEX IF NOT EXISTS idx_finance_transactions_firm_id ON finance_transactions(firm_id);
+    CREATE INDEX IF NOT EXISTS idx_finance_transactions_mandate_id ON finance_transactions(mandate_id);
+    CREATE INDEX IF NOT EXISTS idx_finance_transactions_candidate_id ON finance_transactions(candidate_id);
+    CREATE INDEX IF NOT EXISTS idx_finance_transactions_transaction_date ON finance_transactions(transaction_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_finance_transactions_payment_status ON finance_transactions(payment_status);
+    CREATE INDEX IF NOT EXISTS idx_finance_transactions_type ON finance_transactions(transaction_type);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_performed_by ON audit_log(performed_by);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
 
     -- Updated_at trigger function
     CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -516,6 +635,122 @@ function getInlineSchema() {
     DROP TRIGGER IF EXISTS update_match_scores_updated_at ON match_scores;
     CREATE TRIGGER update_match_scores_updated_at BEFORE UPDATE ON match_scores
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    
+    DROP TRIGGER IF EXISTS update_teams_updated_at ON teams;
+    CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON teams
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    
+    DROP TRIGGER IF EXISTS update_people_updated_at ON people;
+    CREATE TRIGGER update_people_updated_at BEFORE UPDATE ON people
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    
+    DROP TRIGGER IF EXISTS update_employments_updated_at ON employments;
+    CREATE TRIGGER update_employments_updated_at BEFORE UPDATE ON employments
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    
+    DROP TRIGGER IF EXISTS update_documents_updated_at ON documents;
+    CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    
+    DROP TRIGGER IF EXISTS update_finance_transactions_updated_at ON finance_transactions;
+    CREATE TRIGGER update_finance_transactions_updated_at BEFORE UPDATE ON finance_transactions
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    -- ============================================
+    -- AUDIT LOGGING TRIGGERS
+    -- ============================================
+    
+    -- Create audit logging function
+    CREATE OR REPLACE FUNCTION audit_trigger_function()
+    RETURNS TRIGGER AS $$
+    DECLARE
+      old_data JSONB;
+      new_data JSONB;
+      changes JSONB;
+    BEGIN
+      -- For INSERT
+      IF (TG_OP = 'INSERT') THEN
+        new_data := to_jsonb(NEW);
+        INSERT INTO audit_log (entity_type, entity_id, action, changes, timestamp)
+        VALUES (TG_TABLE_NAME, NEW.id, 'CREATE', new_data, CURRENT_TIMESTAMP);
+        RETURN NEW;
+      
+      -- For UPDATE
+      ELSIF (TG_OP = 'UPDATE') THEN
+        old_data := to_jsonb(OLD);
+        new_data := to_jsonb(NEW);
+        -- Only log if data actually changed
+        IF old_data IS DISTINCT FROM new_data THEN
+          changes := jsonb_build_object(
+            'old', old_data,
+            'new', new_data
+          );
+          INSERT INTO audit_log (entity_type, entity_id, action, changes, timestamp)
+          VALUES (TG_TABLE_NAME, NEW.id, 'UPDATE', changes, CURRENT_TIMESTAMP);
+        END IF;
+        RETURN NEW;
+      
+      -- For DELETE
+      ELSIF (TG_OP = 'DELETE') THEN
+        old_data := to_jsonb(OLD);
+        INSERT INTO audit_log (entity_type, entity_id, action, changes, timestamp)
+        VALUES (TG_TABLE_NAME, OLD.id, 'DELETE', old_data, CURRENT_TIMESTAMP);
+        RETURN OLD;
+      END IF;
+      
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    -- Apply audit triggers to important tables
+    
+    -- Firms audit trigger
+    DROP TRIGGER IF EXISTS audit_firms_trigger ON firms;
+    CREATE TRIGGER audit_firms_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON firms
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- Mandates audit trigger
+    DROP TRIGGER IF EXISTS audit_mandates_trigger ON mandates;
+    CREATE TRIGGER audit_mandates_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON mandates
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- Candidates audit trigger
+    DROP TRIGGER IF EXISTS audit_candidates_trigger ON candidates;
+    CREATE TRIGGER audit_candidates_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON candidates
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- Teams audit trigger
+    DROP TRIGGER IF EXISTS audit_teams_trigger ON teams;
+    CREATE TRIGGER audit_teams_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON teams
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- People audit trigger
+    DROP TRIGGER IF EXISTS audit_people_trigger ON people;
+    CREATE TRIGGER audit_people_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON people
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- Documents audit trigger
+    DROP TRIGGER IF EXISTS audit_documents_trigger ON documents;
+    CREATE TRIGGER audit_documents_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON documents
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- Finance transactions audit trigger
+    DROP TRIGGER IF EXISTS audit_finance_transactions_trigger ON finance_transactions;
+    CREATE TRIGGER audit_finance_transactions_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON finance_transactions
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- Users audit trigger (for security)
+    DROP TRIGGER IF EXISTS audit_users_trigger ON users;
+    CREATE TRIGGER audit_users_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON users
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
   `;
 }
 
@@ -586,6 +821,280 @@ async function ensureAllTablesExist() {
     } else {
       console.log('[databaseInitializer] Recommendation events table already exists');
     }
+    
+    // Check if teams table exists
+    const teamsTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'teams'
+    `);
+    
+    if (teamsTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating teams table...');
+      await db.query(`
+        CREATE TABLE teams (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+          description TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_teams_firm_id ON teams(firm_id);
+      `);
+      console.log('[databaseInitializer] ✓ Teams table created');
+    }
+    
+    // Check if people table exists
+    const peopleTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'people'
+    `);
+    
+    if (peopleTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating people table...');
+      await db.query(`
+        CREATE TABLE people (
+          id SERIAL PRIMARY KEY,
+          first_name VARCHAR(100),
+          last_name VARCHAR(100),
+          email VARCHAR(255) UNIQUE,
+          phone VARCHAR(50),
+          firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+          team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+          role VARCHAR(255),
+          linkedin_url VARCHAR(500),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_people_firm_id ON people(firm_id);
+        CREATE INDEX IF NOT EXISTS idx_people_team_id ON people(team_id);
+        CREATE INDEX IF NOT EXISTS idx_people_email ON people(email);
+      `);
+      console.log('[databaseInitializer] ✓ People table created');
+    }
+    
+    // Check if employments table exists
+    const employmentsTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'employments'
+    `);
+    
+    if (employmentsTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating employments table...');
+      await db.query(`
+        CREATE TABLE employments (
+          id SERIAL PRIMARY KEY,
+          person_id INTEGER REFERENCES people(id) ON DELETE CASCADE,
+          firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+          team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+          job_title VARCHAR(255),
+          start_date TIMESTAMP,
+          end_date TIMESTAMP,
+          status VARCHAR(50) DEFAULT 'Active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_employments_person_id ON employments(person_id);
+        CREATE INDEX IF NOT EXISTS idx_employments_firm_id ON employments(firm_id);
+        CREATE INDEX IF NOT EXISTS idx_employments_team_id ON employments(team_id);
+      `);
+      console.log('[databaseInitializer] ✓ Employments table created');
+    }
+    
+    // Check if documents table exists
+    const documentsTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'documents'
+    `);
+    
+    if (documentsTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating documents table...');
+      await db.query(`
+        CREATE TABLE documents (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          file_path VARCHAR(1000) NOT NULL,
+          file_type VARCHAR(100),
+          file_size INTEGER,
+          category VARCHAR(100),
+          tags TEXT[],
+          uploaded_by INTEGER REFERENCES people(id) ON DELETE SET NULL,
+          related_entity_type VARCHAR(50),
+          related_entity_id INTEGER,
+          firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+          mandate_id INTEGER REFERENCES mandates(id) ON DELETE CASCADE,
+          candidate_id INTEGER REFERENCES candidates(id) ON DELETE CASCADE,
+          is_confidential BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_documents_uploaded_by ON documents(uploaded_by);
+        CREATE INDEX IF NOT EXISTS idx_documents_firm_id ON documents(firm_id);
+        CREATE INDEX IF NOT EXISTS idx_documents_mandate_id ON documents(mandate_id);
+        CREATE INDEX IF NOT EXISTS idx_documents_candidate_id ON documents(candidate_id);
+        CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);
+        CREATE INDEX IF NOT EXISTS idx_documents_related_entity ON documents(related_entity_type, related_entity_id);
+      `);
+      console.log('[databaseInitializer] ✓ Documents table created');
+    }
+    
+    // Check if finance_transactions table exists
+    const financeTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'finance_transactions'
+    `);
+    
+    if (financeTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating finance_transactions table...');
+      await db.query(`
+        CREATE TABLE finance_transactions (
+          id SERIAL PRIMARY KEY,
+          transaction_type VARCHAR(50) NOT NULL,
+          category VARCHAR(100),
+          amount DECIMAL(15, 2) NOT NULL,
+          currency VARCHAR(10) DEFAULT 'GBP',
+          description TEXT,
+          transaction_date DATE NOT NULL,
+          firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
+          mandate_id INTEGER REFERENCES mandates(id) ON DELETE CASCADE,
+          candidate_id INTEGER REFERENCES candidates(id) ON DELETE CASCADE,
+          invoice_number VARCHAR(100),
+          payment_status VARCHAR(50) DEFAULT 'Pending',
+          payment_method VARCHAR(50),
+          payment_date DATE,
+          tax_amount DECIMAL(15, 2),
+          notes TEXT,
+          created_by INTEGER REFERENCES people(id) ON DELETE SET NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_finance_transactions_firm_id ON finance_transactions(firm_id);
+        CREATE INDEX IF NOT EXISTS idx_finance_transactions_mandate_id ON finance_transactions(mandate_id);
+        CREATE INDEX IF NOT EXISTS idx_finance_transactions_candidate_id ON finance_transactions(candidate_id);
+        CREATE INDEX IF NOT EXISTS idx_finance_transactions_transaction_date ON finance_transactions(transaction_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_finance_transactions_payment_status ON finance_transactions(payment_status);
+        CREATE INDEX IF NOT EXISTS idx_finance_transactions_type ON finance_transactions(transaction_type);
+      `);
+      console.log('[databaseInitializer] ✓ Finance transactions table created');
+    }
+    
+    // Check if audit_log table exists
+    const auditTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'audit_log'
+    `);
+    
+    if (auditTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating audit_log table...');
+      await db.query(`
+        CREATE TABLE audit_log (
+          id SERIAL PRIMARY KEY,
+          entity_type VARCHAR(100) NOT NULL,
+          entity_id INTEGER NOT NULL,
+          action VARCHAR(50) NOT NULL,
+          performed_by INTEGER REFERENCES people(id) ON DELETE SET NULL,
+          changes JSONB,
+          ip_address VARCHAR(45),
+          user_agent TEXT,
+          timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_log_performed_by ON audit_log(performed_by);
+        CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+      `);
+      console.log('[databaseInitializer] ✓ Audit log table created');
+    }
+    
+    // Ensure audit trigger function and triggers exist
+    console.log('[databaseInitializer] Setting up audit triggers...');
+    await db.query(`
+      -- Create or replace audit logging function
+      CREATE OR REPLACE FUNCTION audit_trigger_function()
+      RETURNS TRIGGER AS $$
+      DECLARE
+        old_data JSONB;
+        new_data JSONB;
+        changes JSONB;
+      BEGIN
+        -- For INSERT
+        IF (TG_OP = 'INSERT') THEN
+          new_data := to_jsonb(NEW);
+          INSERT INTO audit_log (entity_type, entity_id, action, changes, timestamp)
+          VALUES (TG_TABLE_NAME, NEW.id, 'CREATE', new_data, CURRENT_TIMESTAMP);
+          RETURN NEW;
+        
+        -- For UPDATE
+        ELSIF (TG_OP = 'UPDATE') THEN
+          old_data := to_jsonb(OLD);
+          new_data := to_jsonb(NEW);
+          -- Only log if data actually changed
+          IF old_data IS DISTINCT FROM new_data THEN
+            changes := jsonb_build_object(
+              'old', old_data,
+              'new', new_data
+            );
+            INSERT INTO audit_log (entity_type, entity_id, action, changes, timestamp)
+            VALUES (TG_TABLE_NAME, NEW.id, 'UPDATE', changes, CURRENT_TIMESTAMP);
+          END IF;
+          RETURN NEW;
+        
+        -- For DELETE
+        ELSIF (TG_OP = 'DELETE') THEN
+          old_data := to_jsonb(OLD);
+          INSERT INTO audit_log (entity_type, entity_id, action, changes, timestamp)
+          VALUES (TG_TABLE_NAME, OLD.id, 'DELETE', old_data, CURRENT_TIMESTAMP);
+          RETURN OLD;
+        END IF;
+        
+        RETURN NULL;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      -- Apply audit triggers to important tables (using DROP IF EXISTS for idempotency)
+      
+      DROP TRIGGER IF EXISTS audit_firms_trigger ON firms;
+      CREATE TRIGGER audit_firms_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON firms
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+      
+      DROP TRIGGER IF EXISTS audit_mandates_trigger ON mandates;
+      CREATE TRIGGER audit_mandates_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON mandates
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+      
+      DROP TRIGGER IF EXISTS audit_candidates_trigger ON candidates;
+      CREATE TRIGGER audit_candidates_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON candidates
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+      
+      DROP TRIGGER IF EXISTS audit_teams_trigger ON teams;
+      CREATE TRIGGER audit_teams_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON teams
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+      
+      DROP TRIGGER IF EXISTS audit_people_trigger ON people;
+      CREATE TRIGGER audit_people_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON people
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+      
+      DROP TRIGGER IF EXISTS audit_documents_trigger ON documents;
+      CREATE TRIGGER audit_documents_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON documents
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+      
+      DROP TRIGGER IF EXISTS audit_finance_transactions_trigger ON finance_transactions;
+      CREATE TRIGGER audit_finance_transactions_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON finance_transactions
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+      
+      DROP TRIGGER IF EXISTS audit_users_trigger ON users;
+      CREATE TRIGGER audit_users_trigger
+        AFTER INSERT OR UPDATE OR DELETE ON users
+        FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    `);
+    console.log('[databaseInitializer] ✓ Audit triggers configured');
     
     console.log('[databaseInitializer] ✓ All tables verified');
   } catch (error) {

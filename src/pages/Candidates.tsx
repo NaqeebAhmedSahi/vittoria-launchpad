@@ -364,9 +364,9 @@ export default function Candidates() {
           <h1 className="text-2xl font-semibold text-foreground">
             Candidates
           </h1>
-          <Button className="gap-2" onClick={() => setDialogOpen(true)}>
+          {/* <Button className="gap-2" onClick={() => setDialogOpen(true)}>
             <span>+ New Candidate</span>
-          </Button>
+          </Button> */}
         </div>
 
         <div className="flex gap-6">

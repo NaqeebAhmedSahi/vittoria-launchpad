@@ -36,22 +36,26 @@ const navItems = [
   { name: "Candidates", path: "/candidates", icon: Users },
   { name: "Firms", path: "/firms", icon: Building2 },
   { name: "Teams", path: "/teams", icon: UsersRound },
+  { name: "People", path: "/people", icon: User },
   { name: "Mandates", path: "/mandates", icon: Briefcase },
   { name: "Deals", path: "/deals", icon: HandshakeIcon },
-  { 
-    name: "Finance", 
-    path: "/finance", 
+  { name: "Documents", path: "/documents", icon: FileText },
+  {
+    name: "Finance",
+    path: "/finance",
     icon: DollarSign,
     submenu: [
-      { name: "Invoices & P&L", path: "/finance", icon: Receipt },
+      { name: "Transactions", path: "/finance/transactions", icon: DollarSign },
       { name: "Business Financials", path: "/finance/business", icon: TrendingUp },
       { name: "Personal Financials", path: "/finance/personal", icon: User },
       { name: "Personal Ledger", path: "/finance/personal/ledger", icon: FileText },
+      { name: "Invoices & P&L", path: "/finance", icon: Receipt },
     ]
   },
-  { 
-    name: "Intelligence", 
-    path: "/intelligence", 
+  { name: "Audit Log", path: "/audit", icon: Shield },
+  {
+    name: "Intelligence",
+    path: "/intelligence",
     icon: Brain,
     submenu: [
       { name: "Overview", path: "/intelligence", icon: Brain },
@@ -62,9 +66,9 @@ const navItems = [
       { name: "Bias Wizard", path: "/intelligence/bias-wizard", icon: Wand2 },
     ]
   },
-  { 
-    name: "Sources", 
-    path: "/admin/sources", 
+  {
+    name: "Sources",
+    path: "/admin/sources",
     icon: Network,
     submenu: [
       { name: "Source Directory", path: "/admin/sources", icon: Users },
@@ -76,9 +80,9 @@ const navItems = [
   },
   { name: "Voice Notes", path: "/voice", icon: Mic },
   { name: "Templates", path: "/templates", icon: FileText },
-  { 
-    name: "Edge Control", 
-    path: "/edge-control", 
+  {
+    name: "Edge Control",
+    path: "/edge-control",
     icon: Shield,
     submenu: [
       { name: "Overview", path: "/edge-control", icon: Shield },
@@ -90,6 +94,7 @@ const navItems = [
       { name: "Firm Archetypes", path: "/edge/firm-archetypes", icon: Building2 },
     ]
   },
+  // { name: "Audit Log", path: "/audit", icon: Shield },
   { name: "Settings", path: "/settings", icon: Settings },
 ];
 
@@ -98,8 +103,8 @@ export function AppSidebar() {
   const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control", "/intelligence", "/admin/sources"]);
 
   const toggleExpand = (path: string) => {
-    setExpandedItems(prev => 
-      prev.includes(path) 
+    setExpandedItems(prev =>
+      prev.includes(path)
         ? prev.filter(p => p !== path)
         : [...prev, path]
     );

@@ -63,7 +63,7 @@ function mapDbRowToItem(row: IntakeDbRow): IntakeItem {
     const date = new Date(row.uploaded_at);
     uploadedAtStr = date.toLocaleString();
   }
-  
+
   return {
     id: row.id,
     fileName: row.file_name,
@@ -167,7 +167,7 @@ export default function Intake() {
         })
       );
 
-  const rows = await api.intake.addFiles(payload);
+      const rows = await api.intake.addFiles(payload);
       setData(rows.map(mapDbRowToItem));
       toast({
         title: "Files uploaded",
@@ -225,7 +225,7 @@ export default function Intake() {
         })
       );
 
-  const rows = await api.intake.addFiles(payload);
+      const rows = await api.intake.addFiles(payload);
       setData(rows.map(mapDbRowToItem));
       toast({
         title: "Files uploaded",
@@ -262,7 +262,7 @@ export default function Intake() {
         })
       );
 
-  const rows = await api.intake.addFiles(payload);
+      const rows = await api.intake.addFiles(payload);
       setData(rows.map(mapDbRowToItem));
       toast({
         title: "Folder uploaded",
@@ -295,7 +295,7 @@ export default function Intake() {
         }
 
         // Backend can reuse cached JSON for already-parsed items
-  const parsed = await api.intake.parseAndGenerate(item.id);
+        const parsed = await api.intake.parseAndGenerate(item.id);
         const json = JSON.stringify(parsed, null, 2);
 
         setJsonContent(json);
@@ -322,7 +322,7 @@ export default function Intake() {
 
   const handlePreview = async (item: IntakeItem) => {
     try {
-  const resp = await api.intake.preview(item.id);
+      const resp = await api.intake.preview(item.id);
       if (!resp) {
         toast({ title: "Preview not available", variant: "destructive" });
         return;
@@ -487,31 +487,32 @@ export default function Intake() {
 
   const getQualityBadge = (score?: number) => {
     if (score === undefined || score === null) {
-      return <Badge variant="outline" className="text-xs">Not Scored</Badge>;
+      return <Badge variant="outline" className="text-xs whitespace-nowrap">Not Scored</Badge>;
     }
 
     const percentage = score * 100;
-    
+
     if (percentage >= 70) {
       return (
-        <Badge className="bg-green-500 hover:bg-green-600 text-xs">
+        <Badge className="bg-green-500 hover:bg-green-600 text-xs whitespace-nowrap">
           {percentage.toFixed(1)}% Excellent
         </Badge>
       );
     } else if (percentage >= 40) {
       return (
-        <Badge className="bg-yellow-500 hover:bg-yellow-600 text-xs">
+        <Badge className="bg-yellow-500 hover:bg-yellow-600 text-xs whitespace-nowrap">
           {percentage.toFixed(1)}% Review Needed
         </Badge>
       );
     } else {
       return (
-        <Badge variant="destructive" className="text-xs">
+        <Badge variant="destructive" className="text-xs whitespace-nowrap">
           {percentage.toFixed(1)}% Poor
         </Badge>
       );
     }
   };
+
 
   return (
     <div className="space-y-6">

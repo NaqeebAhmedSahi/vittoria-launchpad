@@ -280,7 +280,159 @@ declare global {
         listMatchScoresForCandidate(candidateId: number): Promise<{ success: boolean; scores?: any[]; error?: string }>;
         listMatchScoresForMandate(mandateId: number): Promise<{ success: boolean; scores?: any[]; error?: string }>;
       };
+      team: {
+        list(firmId?: number): Promise<{ success: boolean; teams?: Team[]; error?: string }>;
+        getById(id: number): Promise<{ success: boolean; team?: Team; error?: string }>;
+        create(data: Partial<Team>): Promise<{ success: boolean; teamId?: number; error?: string }>;
+        update(id: number, data: Partial<Team>): Promise<{ success: boolean; error?: string }>;
+        delete(id: number): Promise<{ success: boolean; error?: string }>;
+        getMembers(teamId: number): Promise<{ success: boolean; members?: Person[]; error?: string }>;
+      };
+      people: {
+        list(filters?: { firm_id?: number; team_id?: number; search?: string }): Promise<{ success: boolean; people?: Person[]; error?: string }>;
+        getById(id: number): Promise<{ success: boolean; person?: Person; error?: string }>;
+        create(data: Partial<Person>): Promise<{ success: boolean; personId?: number; error?: string }>;
+        update(id: number, data: Partial<Person>): Promise<{ success: boolean; error?: string }>;
+        delete(id: number): Promise<{ success: boolean; error?: string }>;
+        getEmploymentHistory(personId: number): Promise<{ success: boolean; employments?: Employment[]; error?: string }>;
+      };
+      employment: {
+        list(filters?: { person_id?: number; firm_id?: number; team_id?: number; status?: string }): Promise<{ success: boolean; employments?: Employment[]; error?: string }>;
+        getById(id: number): Promise<{ success: boolean; employment?: Employment; error?: string }>;
+        create(data: Partial<Employment>): Promise<{ success: boolean; employmentId?: number; error?: string }>;
+        update(id: number, data: Partial<Employment>): Promise<{ success: boolean; error?: string }>;
+        delete(id: number): Promise<{ success: boolean; error?: string }>;
+      };
+      document: {
+        list(filters?: { firm_id?: number; mandate_id?: number; candidate_id?: number; category?: string; uploaded_by?: number; search?: string }): Promise<{ success: boolean; documents?: Document[]; error?: string }>;
+        getById(id: number): Promise<{ success: boolean; document?: Document; error?: string }>;
+        create(data: Partial<Document>): Promise<{ success: boolean; documentId?: number; error?: string }>;
+        upload(fileData: any, metadata: Partial<Document>): Promise<{ success: boolean; documentId?: number; error?: string }>;
+        update(id: number, data: Partial<Document>): Promise<{ success: boolean; error?: string }>;
+        delete(id: number): Promise<{ success: boolean; error?: string }>;
+        getByEntity(entityType: string, entityId: number): Promise<{ success: boolean; documents?: Document[]; error?: string }>;
+        getCategories(): Promise<{ success: boolean; categories?: string[]; error?: string }>;
+        download(id: number): Promise<{ success: boolean; data?: { base64: string; name: string; type: string }; error?: string }>;
+      };
+      finance: {
+        list(filters?: { firm_id?: number; mandate_id?: number; candidate_id?: number; transaction_type?: string; payment_status?: string; start_date?: string; end_date?: string; category?: string }): Promise<{ success: boolean; transactions?: FinanceTransaction[]; error?: string }>;
+        getById(id: number): Promise<{ success: boolean; transaction?: FinanceTransaction; error?: string }>;
+        create(data: Partial<FinanceTransaction>): Promise<{ success: boolean; transactionId?: number; error?: string }>;
+        update(id: number, data: Partial<FinanceTransaction>): Promise<{ success: boolean; error?: string }>;
+        delete(id: number): Promise<{ success: boolean; error?: string }>;
+        getSummary(filters?: { firm_id?: number; start_date?: string; end_date?: string }): Promise<{ success: boolean; summary?: any[]; error?: string }>;
+        getCategories(): Promise<{ success: boolean; categories?: string[]; error?: string }>;
+      };
+      audit: {
+        list(filters?: { entity_type?: string; entity_id?: number; performed_by?: number; action?: string; start_date?: string; end_date?: string }): Promise<{ success: boolean; logs?: AuditLog[]; error?: string }>;
+        getById(id: number): Promise<{ success: boolean; log?: AuditLog; error?: string }>;
+        create(data: Partial<AuditLog>): Promise<{ success: boolean; logId?: number; error?: string }>;
+        log(entityType: string, entityId: number, action: string, performedBy: number, changes?: any): Promise<{ success: boolean; logId?: number; error?: string }>;
+        getByEntity(entityType: string, entityId: number): Promise<{ success: boolean; logs?: AuditLog[]; error?: string }>;
+        getUserActivity(userId: number, filters?: { start_date?: string; end_date?: string }): Promise<{ success: boolean; activity?: any[]; error?: string }>;
+        getRecentActivity(limit?: number): Promise<{ success: boolean; activity?: AuditLog[]; error?: string }>;
+        deleteOldLogs(beforeDate: string): Promise<{ success: boolean; deletedCount?: number; error?: string }>;
+      };
     };
+  }
+
+  interface FinanceTransaction {
+    id: number;
+    transaction_type: string;
+    category?: string | null;
+    amount: number;
+    currency: string;
+    description?: string | null;
+    transaction_date: string;
+    firm_id?: number | null;
+    mandate_id?: number | null;
+    candidate_id?: number | null;
+    invoice_number?: string | null;
+    payment_status: string;
+    payment_method?: string | null;
+    payment_date?: string | null;
+    tax_amount?: number | null;
+    notes?: string | null;
+    created_by?: number | null;
+    created_at: string;
+    updated_at: string;
+    creator_name?: string;
+    firm_name?: string;
+    mandate_name?: string;
+    candidate_name?: string;
+  }
+
+  interface AuditLog {
+    id: number;
+    entity_type: string;
+    entity_id: number;
+    action: string;
+    performed_by?: number | null;
+    changes?: any;
+    ip_address?: string | null;
+    user_agent?: string | null;
+    timestamp: string;
+    performer_name?: string;
+  }
+
+  interface Document {
+    id: number;
+    name: string;
+    description?: string | null;
+    file_path: string;
+    file_type?: string | null;
+    file_size?: number | null;
+    category?: string | null;
+    tags?: string[] | null;
+    uploaded_by?: number | null;
+    related_entity_type?: string | null;
+    related_entity_id?: number | null;
+    firm_id?: number | null;
+    mandate_id?: number | null;
+    candidate_id?: number | null;
+    is_confidential: boolean;
+    created_at: string;
+    updated_at: string;
+    uploader_name?: string;
+    firm_name?: string;
+    mandate_name?: string;
+    candidate_name?: string;
+  }
+
+  interface Team {
+    id: number;
+    name: string;
+    firm_id?: number | null;
+    description?: string | null;
+    created_at: string;
+    updated_at: string;
+  }
+
+  interface Person {
+    id: number;
+    first_name: string;
+    last_name: string;
+    email?: string | null;
+    phone?: string | null;
+    firm_id?: number | null;
+    team_id?: number | null;
+    role?: string | null;
+    linkedin_url?: string | null;
+    created_at: string;
+    updated_at: string;
+  }
+
+  interface Employment {
+    id: number;
+    person_id: number;
+    firm_id?: number | null;
+    team_id?: number | null;
+    job_title?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    status: string;
+    created_at: string;
+    updated_at: string;
   }
 
   interface Firm {

@@ -11,8 +11,14 @@ import Candidates from "./pages/Candidates";
 import Mandates from "./pages/Mandates";
 import Firms from "./pages/Firms";
 import Teams from "./pages/Teams";
+import TeamDetail from "./pages/TeamDetail";
+import People from "./pages/People";
+import PersonDetail from "./pages/PersonDetail";
 import Deals from "./pages/Deals";
+import Documents from "./pages/Documents";
 import Finance from "./pages/Finance";
+import FinanceTransactions from "./pages/FinanceTransactions";
+import AuditLog from "./pages/AuditLog";
 import BusinessFinancialsDashboard from "./pages/financials/business/BusinessFinancialsDashboard";
 import BusinessLedger from "./pages/financials/business/BusinessLedger";
 import BusinessCashflow from "./pages/financials/business/BusinessCashflow";
@@ -214,10 +220,15 @@ const App = () => {
               <Route path="/mandates" element={<Mandates />} />
               <Route path="/firms" element={<Firms />} />
               <Route path="/teams" element={<Teams />} />
+              <Route path="/teams/:id" element={<TeamDetail />} />
+              <Route path="/people" element={<People />} />
+              <Route path="/people/:id" element={<PersonDetail />} />
               <Route path="/deals" element={<Deals />} />
+              <Route path="/documents" element={<Documents />} />
               
               {/* Finance Routes */}
               <Route path="/finance" element={<Finance />} />
+              <Route path="/finance/transactions" element={<FinanceTransactions />} />
               <Route path="/finance/business" element={<BusinessFinancialsDashboard />} />
               <Route path="/finance/business/ledger" element={<BusinessLedger />} />
               <Route path="/finance/business/cashflow" element={<BusinessCashflow />} />
@@ -228,6 +239,9 @@ const App = () => {
               <Route path="/finance/personal" element={<PersonalFinancialsDashboard />} />
               <Route path="/finance/personal/ledger" element={<PersonalLedger />} />
               <Route path="/finance/exports" element={<AccountantExports />} />
+              
+              {/* Audit Route */}
+              <Route path="/audit" element={<AuditLog />} />
               
               {/* Intelligence Routes */}
                   <Route path="/intelligence" element={<IntelligenceHub />} />

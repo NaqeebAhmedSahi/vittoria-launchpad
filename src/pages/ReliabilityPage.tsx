@@ -246,30 +246,29 @@ export default function ReliabilityPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name & role</TableHead>
+                <TableHead>Organisation</TableHead>
+                <TableHead className="text-center">Reliability</TableHead>
+                <TableHead className="text-center">Accuracy</TableHead>
+                <TableHead className="text-center">Consistency</TableHead>
+                <TableHead className="text-center">Impact</TableHead>
+                <TableHead className="text-center">Evaluated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredSources.length === 0 && (
                 <TableRow>
-                  <TableHead>Name & role</TableHead>
-                  <TableHead>Organisation</TableHead>
-                  <TableHead className="text-center">Reliability</TableHead>
-                  <TableHead className="text-center">Accuracy</TableHead>
-                  <TableHead className="text-center">Consistency</TableHead>
-                  <TableHead className="text-center">Impact</TableHead>
-                  <TableHead className="text-center">Evaluated</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                    No sources match the selected filters.
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSources.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
-                      No sources match the selected filters.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {filteredSources.map(({ source, reliability_profile }) => (
+              )}
+              {filteredSources.map(({ source, reliability_profile }) => (
                   <TableRow key={source.id}>
                     <TableCell>
                       <div className="font-medium">{source.name}</div>
@@ -319,7 +318,6 @@ export default function ReliabilityPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,3 @@
-<<<<<<< Updated upstream
-import { LayoutDashboard, Upload, Users, Building2, UsersRound, Briefcase, HandshakeIcon, DollarSign, FileText, Shield, Settings, ChevronRight, ChevronDown, TrendingUp, Receipt, User, Brain, Mic, Target, Calendar, BarChart, AlertTriangle, Wand2, Network, GitBranch, Database } from "lucide-react";
-=======
 import {
   LayoutDashboard,
   Upload,
@@ -30,7 +27,6 @@ import {
   Database,
   CheckCircle,
 } from "lucide-react";
->>>>>>> Stashed changes
 import { NavLink } from "@/components/NavLink";
 import { useState } from "react";
 import { useLocation } from "react-router-dom";

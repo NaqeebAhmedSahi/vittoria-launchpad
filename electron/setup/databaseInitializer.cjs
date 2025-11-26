@@ -586,6 +586,34 @@ async function ensureAllTablesExist() {
     } else {
       console.log('[databaseInitializer] Recommendation events table already exists');
     }
+
+    const outcomesTableCheck = await db.query(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = 'mandate_outcomes'
+    `);
+
+    if (outcomesTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating mandate_outcomes table...');
+      await db.query(`
+        CREATE TABLE mandate_outcomes (
+          id SERIAL PRIMARY KEY,
+          candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          mandate_id INTEGER NOT NULL REFERENCES mandates(id) ON DELETE CASCADE,
+          stage VARCHAR(20) NOT NULL CHECK (stage IN ('round 1','round 2','final','offer','selected','rejected')),
+          result VARCHAR(20) NOT NULL CHECK (result IN ('pass','fail','selected','rejected')),
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_mandate_outcomes_candidate ON mandate_outcomes(candidate_id);
+        CREATE INDEX IF NOT EXISTS idx_mandate_outcomes_mandate ON mandate_outcomes(mandate_id);
+      `);
+      console.log('[databaseInitializer] ✓ Mandate outcomes table created');
+    } else {
+      console.log('[databaseInitializer] Mandate outcomes table already exists');
+    }
     
     console.log('[databaseInitializer] ✓ All tables verified');
   } catch (error) {

@@ -1,31 +1,4 @@
-import {
-  LayoutDashboard,
-  Upload,
-  Users,
-  Building2,
-  UsersRound,
-  Briefcase,
-  HandshakeIcon,
-  DollarSign,
-  FileText,
-  Shield,
-  Settings,
-  ChevronRight,
-  ChevronDown,
-  TrendingUp,
-  Receipt,
-  User,
-  Brain,
-  Mic,
-  Target,
-  Calendar,
-  BarChart,
-  AlertTriangle,
-  Wand2,
-  Network,
-  GitBranch,
-  Database,
-} from "lucide-react";
+import { LayoutDashboard, Upload, Users, Building2, UsersRound, Briefcase, HandshakeIcon, DollarSign, FileText, Shield, Settings, ChevronRight, ChevronDown, TrendingUp, Receipt, User, Brain, Mic, Target, Calendar, BarChart, AlertTriangle, Wand2, Network, GitBranch, Database } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
@@ -72,6 +45,7 @@ const navItems = [
       { name: "Bulk Tagging", path: "/admin/sources/tagging", icon: GitBranch },
       { name: "Org Pattern", path: "/admin/similarity/org-pattern", icon: TrendingUp },
       { name: "Import History", path: "/admin/similarity/import-history", icon: Database },
+      { name: "Reliability", path: "/admin/reliability", icon: Shield },  // Added Reliability Page
     ]
   },
   { name: "Voice Notes", path: "/voice", icon: Mic },
@@ -113,7 +87,7 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="w-56 border-r bg-card">
+    <aside className="w-56 border-r bg-card top-0 overflow-y-auto">
       <nav className="p-2 space-y-0.5">
         {navItems.map((item) => (
           <div key={item.path}>

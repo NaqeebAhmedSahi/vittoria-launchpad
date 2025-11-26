@@ -337,19 +337,18 @@ export default function MandateFeedback() {
                     <div className="space-y-2">
                       {candidateRecords.map((r) => {
                         return (
-                          <div key={r.id} className="p-3 rounded-lg bg-muted/50">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium">
-                                  {r.source_name} (Source ID: {r.source_id})
+                          <div key={r.id} className="p-3 rounded-lg bg-muted/50 flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[11px] text-muted-foreground mt-1">Date: {formatDate(r.created_at)}</div>
+                              <div className="text-sm font-medium">Source: {r.source_name}</div>
+                              {r.comment && (
+                                <div className="text-sm text-muted-foreground mt-1 break-words">
+                                  Comment: {r.comment}
                                 </div>
-                                {r.comment && (
-                                  <div className="text-sm text-muted-foreground mt-1 break-words">
-                                    "{r.comment}"
-                                  </div>
-                                )}
-                                <div className="text-[11px] text-muted-foreground mt-1">{formatDate(r.created_at)}</div>
-                              </div>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2">
                               <Badge variant="outline" className={`${getStrengthBadge(r.strength)} text-xs whitespace-nowrap`}>
                                 {r.strength.charAt(0).toUpperCase() + r.strength.slice(1)}
                               </Badge>

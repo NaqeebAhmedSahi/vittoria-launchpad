@@ -15,6 +15,14 @@ contextBridge.exposeInMainWorld("api", {
     listByMandate: (mandateId) => ipcRenderer.invoke("recommendation:listByMandate", mandateId),
     listByCandidate: (candidateId, mandateId) => ipcRenderer.invoke("recommendation:listByCandidate", candidateId, mandateId),
   },
+  outcome: {
+    create: (data) => ipcRenderer.invoke("outcome:create", data),
+    listByMandate: (mandateId) => ipcRenderer.invoke("outcome:listByMandate", mandateId),
+  },
+  reliability: {
+    listSources: () => ipcRenderer.invoke("reliability:listSources"),
+    getSourceDetail: (sourceId) => ipcRenderer.invoke("reliability:getSourceDetail", sourceId),
+  },
   ping: () => "pong",
 
     // 🔹 Setup / PostgreSQL configuration

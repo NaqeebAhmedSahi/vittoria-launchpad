@@ -18,6 +18,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// --- Simple validators ---
+const isAlphabeticName = (value: string): boolean => {
+  // letters, spaces and a few punctuation chars allowed
+  return /^[A-Za-z\s.'\-&]+$/.test(value.trim());
+};
+
+const isValidUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value.trim());
+    // basic guard: must have protocol + hostname
+    return !!url.protocol && !!url.hostname;
+  } catch {
+    return false;
+  }
+};
+
 // If you have these types elsewhere, adjust/remove these local defs
 export interface FirmFormValues {
   name: string;
@@ -53,20 +69,22 @@ interface FirmFormDialogProps {
 }
 
 export function FirmFormDialog({
-  open,
-  onOpenChange,
-  mode,
-  initialData,
-  onSubmit,
-}: FirmFormDialogProps) {
+                                 open,
+                                 onOpenChange,
+                                 mode,
+                                 initialData,
+                                 onSubmit,
+                               }: FirmFormDialogProps) {
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
   const [sectorFocus, setSectorFocus] = useState("");
   const [assetClasses, setAssetClasses] = useState("");
   const [regions, setRegions] = useState("");
-  const [platformType, setPlatformType] = useState<string>("none"); // <-- key change
+  const [platformType, setPlatformType] = useState<string>("none");
   const [website, setWebsite] = useState("");
   const [notesText, setNotesText] = useState("");
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Populate form when editing
   useEffect(() => {
@@ -76,9 +94,10 @@ export function FirmFormDialog({
       setSectorFocus(initialData.sector_focus.join(", "));
       setAssetClasses(initialData.asset_classes.join(", "));
       setRegions(initialData.regions.join(", "));
-      setPlatformType(initialData.platform_type || "none"); // if null/undefined, use "none"
+      setPlatformType(initialData.platform_type || "none");
       setWebsite(initialData.website || "");
       setNotesText(initialData.notes_text || "");
+      setErrors({});
     }
 
     if (open && mode === "create" && !initialData) {
@@ -95,6 +114,7 @@ export function FirmFormDialog({
     setPlatformType("none");
     setWebsite("");
     setNotesText("");
+    setErrors({});
   };
 
   const parseCsv = (value: string): string[] =>
@@ -103,8 +123,52 @@ export function FirmFormDialog({
       .map((v) => v.trim())
       .filter(Boolean);
 
+  const validate = () => {
+    const nextErrors: Record<string, string> = {};
+
+    // Firm name: required + letters only
+    if (!name.trim()) {
+      nextErrors.name = "Firm name is required.";
+    } else if (!isAlphabeticName(name)) {
+      nextErrors.name = "Firm name must contain only letters and spaces.";
+    }
+
+    // Short name: optional but if present, letters only
+    if (shortName.trim() && !isAlphabeticName(shortName)) {
+      nextErrors.short_name = "Short name must contain only letters and spaces.";
+    }
+
+    // Website: optional but if present must be a valid URL
+    if (website.trim() && !isValidUrl(website)) {
+      nextErrors.website = "Please enter a valid website URL (e.g. https://example.com).";
+    }
+
+    // Sector focus: required (at least one)
+    if (parseCsv(sectorFocus).length === 0) {
+      nextErrors.sector_focus = "Sector focus is required (add at least one sector).";
+    }
+
+    // Asset classes: required
+    if (parseCsv(assetClasses).length === 0) {
+      nextErrors.asset_classes = "Asset classes are required (add at least one).";
+    }
+
+    // Regions: required
+    if (parseCsv(regions).length === 0) {
+      nextErrors.regions = "Regions are required (add at least one).";
+    }
+
+    setErrors(nextErrors);
+    return nextErrors;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      return;
+    }
 
     const normalizedPlatformType =
       platformType === "none" ? undefined : platformType;
@@ -152,6 +216,9 @@ export function FirmFormDialog({
                 onChange={(e) => setName(e.target.value)}
                 required
               />
+              {errors.name && (
+                <p className="text-sm text-destructive">{errors.name}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="short_name">Short Name</Label>
@@ -161,6 +228,9 @@ export function FirmFormDialog({
                 onChange={(e) => setShortName(e.target.value)}
                 placeholder="Optional, e.g. GS, MS"
               />
+              {errors.short_name && (
+                <p className="text-sm text-destructive">{errors.short_name}</p>
+              )}
             </div>
           </div>
 
@@ -176,7 +246,6 @@ export function FirmFormDialog({
                   <SelectValue placeholder="Select platform" />
                 </SelectTrigger>
                 <SelectContent>
-                  {/* IMPORTANT: no empty string value here */}
                   <SelectItem value="none">None</SelectItem>
                   <SelectItem value="Bulge Bracket">
                     Bulge Bracket
@@ -199,6 +268,9 @@ export function FirmFormDialog({
                 onChange={(e) => setWebsite(e.target.value)}
                 placeholder="https://example.com"
               />
+              {errors.website && (
+                <p className="text-sm text-destructive">{errors.website}</p>
+              )}
             </div>
           </div>
 
@@ -215,7 +287,13 @@ export function FirmFormDialog({
               value={sectorFocus}
               onChange={(e) => setSectorFocus(e.target.value)}
               placeholder="e.g. TMT, Healthcare, FIG"
+              required
             />
+            {errors.sector_focus && (
+              <p className="text-sm text-destructive">
+                {errors.sector_focus}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -230,7 +308,13 @@ export function FirmFormDialog({
               value={assetClasses}
               onChange={(e) => setAssetClasses(e.target.value)}
               placeholder="e.g. Public Equity, Private Equity, Credit"
+              required
             />
+            {errors.asset_classes && (
+              <p className="text-sm text-destructive">
+                {errors.asset_classes}
+              </p>
+            )}
           </div>
 
           {/* Row 4: Regions */}
@@ -246,7 +330,11 @@ export function FirmFormDialog({
               value={regions}
               onChange={(e) => setRegions(e.target.value)}
               placeholder="e.g. UK, EMEA, Americas, APAC"
+              required
             />
+            {errors.regions && (
+              <p className="text-sm text-destructive">{errors.regions}</p>
+            )}
           </div>
 
           {/* Row 5: Notes */}

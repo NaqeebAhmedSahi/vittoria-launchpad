@@ -70,6 +70,13 @@ const AVAILABLE_GEOGRAPHIES = [
   "Australia",
 ];
 
+// validators
+const isAlphabeticName = (value: string): boolean =>
+  /^[A-Za-z\s.'\-]+$/.test(value.trim());
+
+const isValidEmail = (value: string): boolean =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
 export default function SourceManagement() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -86,40 +93,72 @@ export default function SourceManagement() {
 
   const [sectorInput, setSectorInput] = useState("");
   const [geographyInput, setGeographyInput] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const clearError = (field: string) => {
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+  };
+
+  const validateForm = () => {
+    const validationErrors: Record<string, string> = {};
+
+    // Name: required + alphabetic only
+    if (!formData.name.trim()) {
+      validationErrors.name = "Name is required.";
+    } else if (!isAlphabeticName(formData.name)) {
+      validationErrors.name = "Name must contain only letters (no numbers).";
+    }
+
+    // Email: optional, but if present must be valid
+    if (formData.email.trim() && !isValidEmail(formData.email)) {
+      validationErrors.email = "Please enter a valid email address.";
+    }
+
+    // Role: required
+    if (!formData.role) {
+      validationErrors.role = "Role is required.";
+    }
+
+    // Organisation: required
+    if (!formData.organisation.trim()) {
+      validationErrors.organisation = "Organisation is required.";
+    }
+
+    // Seniority: required
+    if (!formData.seniority_level) {
+      validationErrors.seniority_level = "Seniority level is required.";
+    }
+
+    // Sectors: at least one
+    if (formData.sectors.length === 0) {
+      validationErrors.sectors = "Please add at least one sector.";
+    }
+
+    // Geographies: at least one
+    if (formData.geographies.length === 0) {
+      validationErrors.geographies = "Please add at least one geography.";
+    }
+
+    setErrors(validationErrors);
+    return validationErrors;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
-    if (!formData.name || !formData.role || !formData.organisation || !formData.seniority_level) {
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (formData.sectors.length === 0) {
-      toast({
-        title: "Validation Error",
-        description: "Please add at least one sector",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (formData.geographies.length === 0) {
-      toast({
-        title: "Validation Error",
-        description: "Please add at least one geography",
+        description: "Please fix the highlighted fields before saving.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      // Call backend API to create source
       const result = await window.api.source.create(formData);
 
       if (result.success) {
@@ -127,8 +166,6 @@ export default function SourceManagement() {
           title: "Source Created",
           description: `${formData.name} has been added to the source directory`,
         });
-
-        // Navigate to source directory
         navigate("/admin/sources");
       } else {
         toast({
@@ -150,23 +187,34 @@ export default function SourceManagement() {
   const addSector = (sector: string) => {
     if (sector && !formData.sectors.includes(sector)) {
       setFormData({ ...formData, sectors: [...formData.sectors, sector] });
+      if (errors.sectors) clearError("sectors");
     }
     setSectorInput("");
   };
 
   const removeSector = (sector: string) => {
-    setFormData({ ...formData, sectors: formData.sectors.filter((s) => s !== sector) });
+    setFormData({
+      ...formData,
+      sectors: formData.sectors.filter((s) => s !== sector),
+    });
   };
 
   const addGeography = (geography: string) => {
     if (geography && !formData.geographies.includes(geography)) {
-      setFormData({ ...formData, geographies: [...formData.geographies, geography] });
+      setFormData({
+        ...formData,
+        geographies: [...formData.geographies, geography],
+      });
+      if (errors.geographies) clearError("geographies");
     }
     setGeographyInput("");
   };
 
   const removeGeography = (geography: string) => {
-    setFormData({ ...formData, geographies: formData.geographies.filter((g) => g !== geography) });
+    setFormData({
+      ...formData,
+      geographies: formData.geographies.filter((g) => g !== geography),
+    });
   };
 
   return (
@@ -202,9 +250,15 @@ export default function SourceManagement() {
                   id="name"
                   placeholder="e.g., Sarah Chen"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    clearError("name");
+                  }}
                   required
                 />
+                {errors.name && (
+                  <p className="text-sm text-destructive">{errors.name}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -214,8 +268,14 @@ export default function SourceManagement() {
                   type="email"
                   placeholder="e.g., sarah.chen@example.com"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value });
+                    clearError("email");
+                  }}
                 />
+                {errors.email && (
+                  <p className="text-sm text-destructive">{errors.email}</p>
+                )}
               </div>
             </div>
 
@@ -224,7 +284,13 @@ export default function SourceManagement() {
                 <Label htmlFor="role">
                   Role <span className="text-red-500">*</span>
                 </Label>
-                <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value })}>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, role: value });
+                    clearError("role");
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
@@ -236,6 +302,9 @@ export default function SourceManagement() {
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.role && (
+                  <p className="text-sm text-destructive">{errors.role}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -244,7 +313,10 @@ export default function SourceManagement() {
                 </Label>
                 <Select
                   value={formData.seniority_level}
-                  onValueChange={(value) => setFormData({ ...formData, seniority_level: value })}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, seniority_level: value });
+                    clearError("seniority_level");
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select seniority" />
@@ -257,6 +329,11 @@ export default function SourceManagement() {
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.seniority_level && (
+                  <p className="text-sm text-destructive">
+                    {errors.seniority_level}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -268,9 +345,17 @@ export default function SourceManagement() {
                 id="organisation"
                 placeholder="e.g., TechVentures Capital"
                 value={formData.organisation}
-                onChange={(e) => setFormData({ ...formData, organisation: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, organisation: e.target.value });
+                  clearError("organisation");
+                }}
                 required
               />
+              {errors.organisation && (
+                <p className="text-sm text-destructive">
+                  {errors.organisation}
+                </p>
+              )}
             </div>
 
             {/* Sectors */}
@@ -279,12 +364,17 @@ export default function SourceManagement() {
                 Sectors <span className="text-red-500">*</span>
               </Label>
               <div className="flex gap-2">
-                <Select value={sectorInput} onValueChange={addSector}>
+                <Select
+                  value={sectorInput}
+                  onValueChange={addSector}
+                >
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Add sectors" />
                   </SelectTrigger>
                   <SelectContent>
-                    {AVAILABLE_SECTORS.filter((s) => !formData.sectors.includes(s)).map((sector) => (
+                    {AVAILABLE_SECTORS.filter(
+                      (s) => !formData.sectors.includes(s)
+                    ).map((sector) => (
                       <SelectItem key={sector} value={sector}>
                         {sector}
                       </SelectItem>
@@ -306,9 +396,14 @@ export default function SourceManagement() {
                   </Badge>
                 ))}
                 {formData.sectors.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No sectors added yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    No sectors added yet
+                  </p>
                 )}
               </div>
+              {errors.sectors && (
+                <p className="text-sm text-destructive">{errors.sectors}</p>
+              )}
             </div>
 
             {/* Geographies */}
@@ -317,12 +412,17 @@ export default function SourceManagement() {
                 Geographies <span className="text-red-500">*</span>
               </Label>
               <div className="flex gap-2">
-                <Select value={geographyInput} onValueChange={addGeography}>
+                <Select
+                  value={geographyInput}
+                  onValueChange={addGeography}
+                >
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Add geographies" />
                   </SelectTrigger>
                   <SelectContent>
-                    {AVAILABLE_GEOGRAPHIES.filter((g) => !formData.geographies.includes(g)).map((geography) => (
+                    {AVAILABLE_GEOGRAPHIES.filter(
+                      (g) => !formData.geographies.includes(g)
+                    ).map((geography) => (
                       <SelectItem key={geography} value={geography}>
                         {geography}
                       </SelectItem>
@@ -332,7 +432,11 @@ export default function SourceManagement() {
               </div>
               <div className="flex flex-wrap gap-2 mt-2">
                 {formData.geographies.map((geography) => (
-                  <Badge key={geography} variant="secondary" className="gap-1">
+                  <Badge
+                    key={geography}
+                    variant="secondary"
+                    className="gap-1"
+                  >
                     {geography}
                     <button
                       type="button"
@@ -344,9 +448,16 @@ export default function SourceManagement() {
                   </Badge>
                 ))}
                 {formData.geographies.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No geographies added yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    No geographies added yet
+                  </p>
                 )}
               </div>
+              {errors.geographies && (
+                <p className="text-sm text-destructive">
+                  {errors.geographies}
+                </p>
+              )}
             </div>
 
             {/* Actions */}
@@ -355,7 +466,11 @@ export default function SourceManagement() {
                 <Plus className="h-4 w-4 mr-2" />
                 Create Source
               </Button>
-              <Button type="button" variant="outline" onClick={() => navigate("/admin/sources")}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate("/admin/sources")}
+              >
                 Cancel
               </Button>
             </div>

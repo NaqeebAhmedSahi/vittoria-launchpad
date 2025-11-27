@@ -8,7 +8,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -18,8 +17,6 @@ import {
 } from "@/components/ui/select";
 import { useEffect, useState } from "react";
 
-// Minimal types used inside this component.
-// These don't need to perfectly match your global types, just the fields we use.
 interface FirmOption {
   id: number;
   name: string;
@@ -45,25 +42,21 @@ interface MandateFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: any) => void;
-
-  // optional for edit flow
   mode?: "create" | "edit";
   initialData?: MandateEditData;
-
-  // optional so TopBar can still use this without passing firms
   firms?: FirmOption[];
 }
 
 export function MandateFormDialog({
-  open,
-  onOpenChange,
-  onSubmit,
-  mode = "create",
-  initialData,
-  firms,
-}: MandateFormDialogProps) {
+                                    open,
+                                    onOpenChange,
+                                    onSubmit,
+                                    mode = "create",
+                                    initialData,
+                                    firms,
+                                  }: MandateFormDialogProps) {
   const [name, setName] = useState("");
-  const [firmId, setFirmId] = useState<string>(""); // Select stores string
+  const [firmId, setFirmId] = useState<string>("");
   const [location, setLocation] = useState("");
   const [primarySector, setPrimarySector] = useState("");
   const [sectors, setSectors] = useState("");
@@ -74,6 +67,8 @@ export function MandateFormDialog({
   const [seniorityMax, setSeniorityMax] = useState("");
   const [status, setStatus] = useState<string>("OPEN");
   const [rawBrief, setRawBrief] = useState("");
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const safeFirms: FirmOption[] = firms ?? [];
 
@@ -91,6 +86,7 @@ export function MandateFormDialog({
       setSeniorityMax(initialData.seniority_max || "");
       setStatus(initialData.status || "OPEN");
       setRawBrief(initialData.raw_brief || "");
+      setErrors({});
     }
 
     if (open && mode === "create" && !initialData) {
@@ -111,6 +107,7 @@ export function MandateFormDialog({
     setSeniorityMax("");
     setStatus("OPEN");
     setRawBrief("");
+    setErrors({});
   };
 
   const parseCsv = (value: string): string[] =>
@@ -119,27 +116,46 @@ export function MandateFormDialog({
       .map((v) => v.trim())
       .filter(Boolean);
 
+  const validate = () => {
+    const nextErrors: Record<string, string> = {};
+
+    if (!name.trim()) nextErrors.name = "Mandate name is required.";
+    if (safeFirms.length > 0 && !firmId) nextErrors.firm_id = "Client firm is required.";
+    if (!location.trim()) nextErrors.location = "Location is required.";
+    if (!primarySector.trim()) nextErrors.primary_sector = "Primary sector is required.";
+    if (!parseCsv(sectors).length) nextErrors.sectors = "At least one sector is required.";
+    if (!parseCsv(functionsVal).length) nextErrors.functions = "At least one function is required.";
+    if (!parseCsv(assetClasses).length) nextErrors.asset_classes = "At least one asset class is required.";
+    if (!parseCsv(regions).length) nextErrors.regions = "At least one region is required.";
+    if (!seniorityMin.trim()) nextErrors.seniority_min = "Seniority min is required.";
+    if (!seniorityMax.trim()) nextErrors.seniority_max = "Seniority max is required.";
+    if (!status) nextErrors.status = "Status is required.";
+    // if you want rawBrief required too, uncomment:
+    // if (!rawBrief.trim()) nextErrors.raw_brief = "Scope / notes are required.";
+
+    setErrors(nextErrors);
+    return nextErrors;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // If no firms provided (e.g. from TopBar), we can't set firm_id;
-    // You could extend this later to let user type a firm name, etc.
-    if (!firmId && safeFirms.length > 0) {
-      return; // basic guard
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      return;
     }
 
     const payload = {
       name: name.trim(),
-      // If you use this from TopBar without firms, you'll need to adapt this field later.
       firm_id: safeFirms.length > 0 ? Number(firmId) : undefined,
-      location: location.trim() || undefined,
-      primary_sector: primarySector.trim() || undefined,
+      location: location.trim(),
+      primary_sector: primarySector.trim(),
       sectors: parseCsv(sectors),
       functions: parseCsv(functionsVal),
       asset_classes: parseCsv(assetClasses),
       regions: parseCsv(regions),
-      seniority_min: seniorityMin.trim() || undefined,
-      seniority_max: seniorityMax.trim() || undefined,
+      seniority_min: seniorityMin.trim(),
+      seniority_max: seniorityMax.trim(),
       status: status || "OPEN",
       raw_brief: rawBrief.trim() || undefined,
     };
@@ -178,6 +194,9 @@ export function MandateFormDialog({
                 required
                 placeholder="e.g., ECM - Global Bank - London"
               />
+              {errors.name && (
+                <p className="text-sm text-destructive">{errors.name}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="status">Status *</Label>
@@ -194,6 +213,9 @@ export function MandateFormDialog({
                   <SelectItem value="CLOSED">Closed</SelectItem>
                 </SelectContent>
               </Select>
+              {errors.status && (
+                <p className="text-sm text-destructive">{errors.status}</p>
+              )}
             </div>
           </div>
 
@@ -205,60 +227,80 @@ export function MandateFormDialog({
               </Label>
 
               {safeFirms.length === 0 ? (
-                <Input
-                  id="firm_id"
-                  disabled
-                  placeholder="No firms available. Create a firm first."
-                />
+                <>
+                  <Input
+                    id="firm_id"
+                    disabled
+                    placeholder="No firms available. Create a firm first."
+                  />
+                  {errors.firm_id && (
+                    <p className="text-sm text-destructive">{errors.firm_id}</p>
+                  )}
+                </>
               ) : (
-                <Select
-                  value={firmId}
-                  onValueChange={(val) => setFirmId(val)}
-                >
-                  <SelectTrigger id="firm_id">
-                    <SelectValue placeholder="Select firm" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {safeFirms.map((firm) => (
-                      <SelectItem
-                        key={firm.id}
-                        value={String(firm.id)}
-                      >
-                        {firm.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select
+                    value={firmId}
+                    onValueChange={(val) => setFirmId(val)}
+                  >
+                    <SelectTrigger id="firm_id">
+                      <SelectValue placeholder="Select firm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {safeFirms.map((firm) => (
+                        <SelectItem
+                          key={firm.id}
+                          value={String(firm.id)}
+                        >
+                          {firm.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.firm_id && (
+                    <p className="text-sm text-destructive">{errors.firm_id}</p>
+                  )}
+                </>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
+              <Label htmlFor="location">Location *</Label>
               <Input
                 id="location"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="e.g., London, UK"
+                required
               />
+              {errors.location && (
+                <p className="text-sm text-destructive">{errors.location}</p>
+              )}
             </div>
           </div>
 
           {/* Row 3: Primary sector + sectors */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="primary_sector">Primary Sector</Label>
+              <Label htmlFor="primary_sector">Primary Sector *</Label>
               <Input
                 id="primary_sector"
                 value={primarySector}
                 onChange={(e) => setPrimarySector(e.target.value)}
                 placeholder="e.g., ECM, M&A, FIG"
+                required
               />
+              {errors.primary_sector && (
+                <p className="text-sm text-destructive">
+                  {errors.primary_sector}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="sectors">
                 Sector Tags{" "}
                 <span className="text-xs text-muted-foreground">
-                  (comma separated)
+                  (comma separated) *
                 </span>
               </Label>
               <Input
@@ -266,7 +308,11 @@ export function MandateFormDialog({
                 value={sectors}
                 onChange={(e) => setSectors(e.target.value)}
                 placeholder="e.g., TMT, Healthcare, FIG"
+                required
               />
+              {errors.sectors && (
+                <p className="text-sm text-destructive">{errors.sectors}</p>
+              )}
             </div>
           </div>
 
@@ -276,7 +322,7 @@ export function MandateFormDialog({
               <Label htmlFor="functions">
                 Functions{" "}
                 <span className="text-xs text-muted-foreground">
-                  (comma separated)
+                  (comma separated) *
                 </span>
               </Label>
               <Input
@@ -284,13 +330,19 @@ export function MandateFormDialog({
                 value={functionsVal}
                 onChange={(e) => setFunctionsVal(e.target.value)}
                 placeholder="e.g., Origination, Coverage, Syndicate"
+                required
               />
+              {errors.functions && (
+                <p className="text-sm text-destructive">
+                  {errors.functions}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="asset_classes">
                 Asset Classes{" "}
                 <span className="text-xs text-muted-foreground">
-                  (comma separated)
+                  (comma separated) *
                 </span>
               </Label>
               <Input
@@ -298,7 +350,13 @@ export function MandateFormDialog({
                 value={assetClasses}
                 onChange={(e) => setAssetClasses(e.target.value)}
                 placeholder="e.g., Public Equity, Private Equity, Credit"
+                required
               />
+              {errors.asset_classes && (
+                <p className="text-sm text-destructive">
+                  {errors.asset_classes}
+                </p>
+              )}
             </div>
           </div>
 
@@ -308,7 +366,7 @@ export function MandateFormDialog({
               <Label htmlFor="regions">
                 Regions{" "}
                 <span className="text-xs text-muted-foreground">
-                  (comma separated)
+                  (comma separated) *
                 </span>
               </Label>
               <Input
@@ -316,39 +374,61 @@ export function MandateFormDialog({
                 value={regions}
                 onChange={(e) => setRegions(e.target.value)}
                 placeholder="e.g., UK, EMEA, Americas, APAC"
+                required
               />
+              {errors.regions && (
+                <p className="text-sm text-destructive">{errors.regions}</p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="seniority_min">Seniority Min</Label>
+              <Label htmlFor="seniority_min">Seniority Min *</Label>
               <Input
                 id="seniority_min"
                 value={seniorityMin}
                 onChange={(e) => setSeniorityMin(e.target.value)}
                 placeholder="e.g., VP"
+                required
               />
+              {errors.seniority_min && (
+                <p className="text-sm text-destructive">
+                  {errors.seniority_min}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="seniority_max">Seniority Max</Label>
+              <Label htmlFor="seniority_max">Seniority Max *</Label>
               <Input
                 id="seniority_max"
                 value={seniorityMax}
                 onChange={(e) => setSeniorityMax(e.target.value)}
                 placeholder="e.g., MD"
+                required
               />
+              {errors.seniority_max && (
+                <p className="text-sm text-destructive">
+                  {errors.seniority_max}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Row 6: Scope / Notes */}
-          {/* <div className="space-y-2">
-            <Label htmlFor="raw_brief">Scope & Notes</Label>
+          {/* Row 6: Scope / Notes (optional for now) */}
+          {/*
+          <div className="space-y-2">
+            <Label htmlFor="raw_brief">Scope & Notes *</Label>
             <Textarea
               id="raw_brief"
               value={rawBrief}
               onChange={(e) => setRawBrief(e.target.value)}
               rows={4}
               placeholder="Paste client brief, internal notes, nuances, etc."
+              required
             />
-          </div> */}
+            {errors.raw_brief && (
+              <p className="text-sm text-destructive">{errors.raw_brief}</p>
+            )}
+          </div>
+          */}
 
           <DialogFooter>
             <Button

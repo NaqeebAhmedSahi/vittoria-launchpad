@@ -1,5 +1,5 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "bws-vittoria",
   "private": true,
   "version": "1.0.0",
   "description": "Vittoria Launchpad - Executive Search Management Platform",
@@ -17,16 +17,19 @@
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps",
     "electron:dev": "cross-env NODE_ENV=development concurrently -k \"npm:dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder",
+    "electron:build": "npm run check-build-assets && npm run build && electron-builder",
     "reset:setup": "node scripts/reset-setup.cjs",
-    "electron:build:win": "npm run build && electron-builder --win --x64",
-    "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:build:linux": "npm run build && electron-builder --linux",
-    "electron:build:all": "npm run build && electron-builder -mwl"
+    "electron:build:win": "npm run check-build-assets && npm run build && electron-builder --win --x64",
+    "electron:build:mac": "npm run check-build-assets && npm run build && electron-builder --mac",
+    "electron:build:linux": "npm run check-build-assets && npm run build && electron-builder --linux",
+    "electron:build:all": "npm run check-build-assets && npm run build && electron-builder -mwl",
+    "check-build-assets": "node scripts/check-build-assets.cjs"
+  ,
+    "generate-icons": "node scripts/generate-icons.cjs"
   },
   "build": {
     "appId": "com.vittoria.launchpad",
-    "productName": "Vittoria Launchpad",
+  "productName": "BWS Vittoria",
     "directories": {
       "output": "release"
     },
@@ -35,9 +38,11 @@
       "electron/**/*",
       "config/**/*",
       "migrations/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/**/*"
     ],
     "asar": true,
+    "afterPack": "scripts/afterPack.cjs",
     "mac": {
       "target": [
         "dmg",
@@ -110,6 +115,7 @@
     "dotenv": "^17.2.3",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
+    "jimp": "^0.22.12",
     "langchain": "^0.0.158",
     "lucide-react": "^0.462.0",
     "mammoth": "^1.4.19",
@@ -126,7 +132,6 @@
     "react-resizable-panels": "^2.1.9",
     "react-router-dom": "^6.30.1",
     "recharts": "^2.15.4",
-    "sharp": "^0.34.5",
     "sonner": "^1.7.4",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",

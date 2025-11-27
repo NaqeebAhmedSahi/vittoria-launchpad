@@ -4,7 +4,7 @@
  */
 
 const Tesseract = require('tesseract.js');
-const sharp = require('sharp');
+const Jimp = require('jimp');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -47,22 +47,24 @@ async function isPdfImageBased(filePath) {
  */
 async function preprocessImage(inputPath) {
   try {
-    const image = sharp(inputPath);
-    const metadata = await image.metadata();
-    
-    console.log(`[preprocessImage] Original size: ${metadata.width}x${metadata.height}`);
-    
-    // Create a processed buffer
-    const processedBuffer = await image
-      .greyscale() // Convert to grayscale
-      .normalize() // Normalize contrast
-      .resize({ 
-        width: metadata.width > 2000 ? 2000 : undefined, // Limit max width
-        withoutEnlargement: true 
-      })
-      .png() // Convert to PNG for consistency
-      .toBuffer();
-    
+    const image = await Jimp.read(inputPath);
+    const width = image.bitmap.width;
+    const height = image.bitmap.height;
+
+    console.log(`[preprocessImage] Original size: ${width}x${height}`);
+
+    // Limit max width to 2000px for performance
+    if (width > 2000) {
+      image.resize(2000, Jimp.AUTO);
+    }
+
+    // Convert to grayscale and increase contrast
+    image.grayscale();
+    // Jimp's contrast range is -1 to +1; use a modest boost
+    image.contrast(0.3);
+
+    // Convert to PNG buffer
+    const processedBuffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return processedBuffer;
   } catch (error) {
     console.error('[preprocessImage] Error preprocessing image:', error);

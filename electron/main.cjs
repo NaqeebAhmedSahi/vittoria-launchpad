@@ -2,6 +2,22 @@
 const { app, BrowserWindow } = require("electron");
 const path = require("path");
 
+// If packaging didn't vendor libvips, copy its location into LD_LIBRARY_PATH so native
+// sharp loading can find the shared objects. This is a no-op when folder not present.
+try {
+  const fs = require('fs');
+  const resourcesVendor = process.resourcesPath
+    ? path.join(process.resourcesPath, 'vendor', 'libvips')
+    : path.join(__dirname, '..', 'resources', 'vendor', 'libvips');
+  if (fs.existsSync(resourcesVendor)) {
+    const prev = process.env.LD_LIBRARY_PATH || '';
+    process.env.LD_LIBRARY_PATH = resourcesVendor + (prev ? ':' + prev : '');
+    console.log('[main.cjs] LD_LIBRARY_PATH prepended with', resourcesVendor);
+  }
+} catch (e) {
+  // ignore errors here
+}
+
 // Load environment variables from .env.local (ENCRYPTION_KEY, etc.)
 require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
 

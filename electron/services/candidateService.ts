@@ -29,7 +29,8 @@ export async function createDraftCandidate(
   `;
 
   const values = [
-    parsed.name,
+    // Use sensible fallbacks so we don't try to insert NULL into a NOT NULL column.
+    parsed.name || (parsed as any).full_name || parsed.current_title || parsed.current_firm || '',
     parsed.current_title || null,
     parsed.current_firm || null,
     parsed.location || null,

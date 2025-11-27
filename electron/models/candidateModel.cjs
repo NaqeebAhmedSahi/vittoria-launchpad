@@ -127,7 +127,9 @@ async function createDraftCandidate(parsedCv) {
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING id`,
     [
-      parsedCv.name,
+      // Ensure we never insert NULL into the name column. Use parsedCv.name,
+      // fallback to other parsed fields if available, otherwise empty string.
+      parsedCv.name || parsedCv.full_name || parsedCv.current_title || parsedCv.current_firm || '',
       parsedCv.current_title || null,
       parsedCv.current_firm || null,
       parsedCv.location || null,

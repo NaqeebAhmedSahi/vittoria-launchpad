@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TagInputField } from "@/components/TagInputField";
 
 // --- Simple validators ---
 const isAlphabeticName = (value: string): boolean => {
@@ -77,9 +78,9 @@ export function FirmFormDialog({
                                }: FirmFormDialogProps) {
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
-  const [sectorFocus, setSectorFocus] = useState("");
-  const [assetClasses, setAssetClasses] = useState("");
-  const [regions, setRegions] = useState("");
+  const [sectorFocus, setSectorFocus] = useState<string[]>([]);
+  const [assetClasses, setAssetClasses] = useState<string[]>([]);
+  const [regions, setRegions] = useState<string[]>([]);
   const [platformType, setPlatformType] = useState<string>("none");
   const [website, setWebsite] = useState("");
   const [notesText, setNotesText] = useState("");
@@ -91,9 +92,9 @@ export function FirmFormDialog({
     if (open && mode === "edit" && initialData) {
       setName(initialData.name || "");
       setShortName(initialData.short_name || "");
-      setSectorFocus(initialData.sector_focus.join(", "));
-      setAssetClasses(initialData.asset_classes.join(", "));
-      setRegions(initialData.regions.join(", "));
+      setSectorFocus(initialData.sector_focus || []);
+      setAssetClasses(initialData.asset_classes || []);
+      setRegions(initialData.regions || []);
       setPlatformType(initialData.platform_type || "none");
       setWebsite(initialData.website || "");
       setNotesText(initialData.notes_text || "");
@@ -108,20 +109,14 @@ export function FirmFormDialog({
   const resetForm = () => {
     setName("");
     setShortName("");
-    setSectorFocus("");
-    setAssetClasses("");
-    setRegions("");
+    setSectorFocus([]);
+    setAssetClasses([]);
+    setRegions([]);
     setPlatformType("none");
     setWebsite("");
     setNotesText("");
     setErrors({});
   };
-
-  const parseCsv = (value: string): string[] =>
-    value
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
@@ -144,17 +139,17 @@ export function FirmFormDialog({
     }
 
     // Sector focus: required (at least one)
-    if (parseCsv(sectorFocus).length === 0) {
+    if (sectorFocus.length === 0) {
       nextErrors.sector_focus = "Sector focus is required (add at least one sector).";
     }
 
     // Asset classes: required
-    if (parseCsv(assetClasses).length === 0) {
+    if (assetClasses.length === 0) {
       nextErrors.asset_classes = "Asset classes are required (add at least one).";
     }
 
     // Regions: required
-    if (parseCsv(regions).length === 0) {
+    if (regions.length === 0) {
       nextErrors.regions = "Regions are required (add at least one).";
     }
 
@@ -176,9 +171,9 @@ export function FirmFormDialog({
     const payload: FirmFormValues = {
       name: name.trim(),
       short_name: shortName.trim() || undefined,
-      sector_focus: parseCsv(sectorFocus),
-      asset_classes: parseCsv(assetClasses),
-      regions: parseCsv(regions),
+      sector_focus: sectorFocus,
+      asset_classes: assetClasses,
+      regions,
       platform_type: normalizedPlatformType,
       website: website.trim() || undefined,
       notes_text: notesText.trim() || undefined,
@@ -201,7 +196,7 @@ export function FirmFormDialog({
         onOpenChange(value);
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -275,67 +270,36 @@ export function FirmFormDialog({
           </div>
 
           {/* Row 3: Sector / Asset classes */}
-          <div className="space-y-2">
-            <Label htmlFor="sector_focus">
-              Sector Focus{" "}
-              <span className="text-xs text-muted-foreground">
-                (comma separated)
-              </span>
-            </Label>
-            <Input
-              id="sector_focus"
-              value={sectorFocus}
-              onChange={(e) => setSectorFocus(e.target.value)}
-              placeholder="e.g. TMT, Healthcare, FIG"
-              required
-            />
-            {errors.sector_focus && (
-              <p className="text-sm text-destructive">
-                {errors.sector_focus}
-              </p>
-            )}
-          </div>
+          <TagInputField
+            id="sector_focus"
+            label="Sector Focus"
+            tags={sectorFocus}
+            onChange={setSectorFocus}
+            placeholder="Add a sector (e.g. TMT)"
+            required
+            error={errors.sector_focus}
+          />
 
-          <div className="space-y-2">
-            <Label htmlFor="asset_classes">
-              Asset Classes{" "}
-              <span className="text-xs text-muted-foreground">
-                (comma separated)
-              </span>
-            </Label>
-            <Input
-              id="asset_classes"
-              value={assetClasses}
-              onChange={(e) => setAssetClasses(e.target.value)}
-              placeholder="e.g. Public Equity, Private Equity, Credit"
-              required
-            />
-            {errors.asset_classes && (
-              <p className="text-sm text-destructive">
-                {errors.asset_classes}
-              </p>
-            )}
-          </div>
+          <TagInputField
+            id="asset_classes"
+            label="Asset Classes"
+            tags={assetClasses}
+            onChange={setAssetClasses}
+            placeholder="Add an asset class"
+            required
+            error={errors.asset_classes}
+          />
 
           {/* Row 4: Regions */}
-          <div className="space-y-2">
-            <Label htmlFor="regions">
-              Regions{" "}
-              <span className="text-xs text-muted-foreground">
-                (comma separated)
-              </span>
-            </Label>
-            <Input
-              id="regions"
-              value={regions}
-              onChange={(e) => setRegions(e.target.value)}
-              placeholder="e.g. UK, EMEA, Americas, APAC"
-              required
-            />
-            {errors.regions && (
-              <p className="text-sm text-destructive">{errors.regions}</p>
-            )}
-          </div>
+          <TagInputField
+            id="regions"
+            label="Regions"
+            tags={regions}
+            onChange={setRegions}
+            placeholder="Add a region (e.g. UK)"
+            required
+            error={errors.regions}
+          />
 
           {/* Row 5: Notes */}
           <div className="space-y-2">

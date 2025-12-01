@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEffect, useState } from "react";
+import { TagInputField } from "@/components/TagInputField";
 
 interface FirmOption {
   id: number;
@@ -59,10 +60,10 @@ export function MandateFormDialog({
   const [firmId, setFirmId] = useState<string>("");
   const [location, setLocation] = useState("");
   const [primarySector, setPrimarySector] = useState("");
-  const [sectors, setSectors] = useState("");
-  const [functionsVal, setFunctionsVal] = useState("");
-  const [assetClasses, setAssetClasses] = useState("");
-  const [regions, setRegions] = useState("");
+  const [sectors, setSectors] = useState<string[]>([]);
+  const [functionsVal, setFunctionsVal] = useState<string[]>([]);
+  const [assetClasses, setAssetClasses] = useState<string[]>([]);
+  const [regions, setRegions] = useState<string[]>([]);
   const [seniorityMin, setSeniorityMin] = useState("");
   const [seniorityMax, setSeniorityMax] = useState("");
   const [status, setStatus] = useState<string>("OPEN");
@@ -78,10 +79,10 @@ export function MandateFormDialog({
       setFirmId(String(initialData.firm_id));
       setLocation(initialData.location || "");
       setPrimarySector(initialData.primary_sector || "");
-      setSectors((initialData.sectors || []).join(", "));
-      setFunctionsVal((initialData.functions || []).join(", "));
-      setAssetClasses((initialData.asset_classes || []).join(", "));
-      setRegions((initialData.regions || []).join(", "));
+      setSectors(initialData.sectors || []);
+      setFunctionsVal(initialData.functions || []);
+      setAssetClasses(initialData.asset_classes || []);
+      setRegions(initialData.regions || []);
       setSeniorityMin(initialData.seniority_min || "");
       setSeniorityMax(initialData.seniority_max || "");
       setStatus(initialData.status || "OPEN");
@@ -99,22 +100,16 @@ export function MandateFormDialog({
     setFirmId("");
     setLocation("");
     setPrimarySector("");
-    setSectors("");
-    setFunctionsVal("");
-    setAssetClasses("");
-    setRegions("");
+    setSectors([]);
+    setFunctionsVal([]);
+    setAssetClasses([]);
+    setRegions([]);
     setSeniorityMin("");
     setSeniorityMax("");
     setStatus("OPEN");
     setRawBrief("");
     setErrors({});
   };
-
-  const parseCsv = (value: string): string[] =>
-    value
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
@@ -123,10 +118,10 @@ export function MandateFormDialog({
     if (safeFirms.length > 0 && !firmId) nextErrors.firm_id = "Client firm is required.";
     if (!location.trim()) nextErrors.location = "Location is required.";
     if (!primarySector.trim()) nextErrors.primary_sector = "Primary sector is required.";
-    if (!parseCsv(sectors).length) nextErrors.sectors = "At least one sector is required.";
-    if (!parseCsv(functionsVal).length) nextErrors.functions = "At least one function is required.";
-    if (!parseCsv(assetClasses).length) nextErrors.asset_classes = "At least one asset class is required.";
-    if (!parseCsv(regions).length) nextErrors.regions = "At least one region is required.";
+    if (!sectors.length) nextErrors.sectors = "At least one sector is required.";
+    if (!functionsVal.length) nextErrors.functions = "At least one function is required.";
+    if (!assetClasses.length) nextErrors.asset_classes = "At least one asset class is required.";
+    if (!regions.length) nextErrors.regions = "At least one region is required.";
     if (!seniorityMin.trim()) nextErrors.seniority_min = "Seniority min is required.";
     if (!seniorityMax.trim()) nextErrors.seniority_max = "Seniority max is required.";
     if (!status) nextErrors.status = "Status is required.";
@@ -150,10 +145,10 @@ export function MandateFormDialog({
       firm_id: safeFirms.length > 0 ? Number(firmId) : undefined,
       location: location.trim(),
       primary_sector: primarySector.trim(),
-      sectors: parseCsv(sectors),
-      functions: parseCsv(functionsVal),
-      asset_classes: parseCsv(assetClasses),
-      regions: parseCsv(regions),
+      sectors,
+      functions: functionsVal,
+      asset_classes: assetClasses,
+      regions,
       seniority_min: seniorityMin.trim(),
       seniority_max: seniorityMax.trim(),
       status: status || "OPEN",
@@ -177,7 +172,7 @@ export function MandateFormDialog({
         onOpenChange(value);
       }}
     >
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -296,90 +291,51 @@ export function MandateFormDialog({
                 </p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="sectors">
-                Sector Tags{" "}
-                <span className="text-xs text-muted-foreground">
-                  (comma separated) *
-                </span>
-              </Label>
-              <Input
-                id="sectors"
-                value={sectors}
-                onChange={(e) => setSectors(e.target.value)}
-                placeholder="e.g., TMT, Healthcare, FIG"
-                required
-              />
-              {errors.sectors && (
-                <p className="text-sm text-destructive">{errors.sectors}</p>
-              )}
-            </div>
+            <TagInputField
+              id="sectors"
+              label="Sector Tags"
+              tags={sectors}
+              onChange={setSectors}
+              placeholder="Add a sector and press Add/Enter"
+              required
+              error={errors.sectors}
+            />
           </div>
 
           {/* Row 4: Functions / Asset classes */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="functions">
-                Functions{" "}
-                <span className="text-xs text-muted-foreground">
-                  (comma separated) *
-                </span>
-              </Label>
-              <Input
-                id="functions"
-                value={functionsVal}
-                onChange={(e) => setFunctionsVal(e.target.value)}
-                placeholder="e.g., Origination, Coverage, Syndicate"
-                required
-              />
-              {errors.functions && (
-                <p className="text-sm text-destructive">
-                  {errors.functions}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="asset_classes">
-                Asset Classes{" "}
-                <span className="text-xs text-muted-foreground">
-                  (comma separated) *
-                </span>
-              </Label>
-              <Input
-                id="asset_classes"
-                value={assetClasses}
-                onChange={(e) => setAssetClasses(e.target.value)}
-                placeholder="e.g., Public Equity, Private Equity, Credit"
-                required
-              />
-              {errors.asset_classes && (
-                <p className="text-sm text-destructive">
-                  {errors.asset_classes}
-                </p>
-              )}
-            </div>
+            <TagInputField
+              id="functions"
+              label="Functions"
+              tags={functionsVal}
+              onChange={setFunctionsVal}
+              placeholder="e.g., Origination"
+              required
+              error={errors.functions}
+            />
+            <TagInputField
+              id="asset_classes"
+              label="Asset Classes"
+              tags={assetClasses}
+              onChange={setAssetClasses}
+              placeholder="e.g., Public Equity"
+              required
+              error={errors.asset_classes}
+            />
           </div>
 
           {/* Row 5: Regions / Seniority */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2 col-span-1">
-              <Label htmlFor="regions">
-                Regions{" "}
-                <span className="text-xs text-muted-foreground">
-                  (comma separated) *
-                </span>
-              </Label>
-              <Input
-                id="regions"
-                value={regions}
-                onChange={(e) => setRegions(e.target.value)}
-                placeholder="e.g., UK, EMEA, Americas, APAC"
-                required
-              />
-              {errors.regions && (
-                <p className="text-sm text-destructive">{errors.regions}</p>
-              )}
-            </div>
+            <TagInputField
+              id="regions"
+              label="Regions"
+              tags={regions}
+              onChange={setRegions}
+              placeholder="e.g., UK, EMEA"
+              required
+              error={errors.regions}
+              className="col-span-1"
+            />
             <div className="space-y-2">
               <Label htmlFor="seniority_min">Seniority Min *</Label>
               <Input

@@ -12,6 +12,7 @@ import {
   Settings,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   TrendingUp,
   Receipt,
   User,
@@ -104,6 +105,7 @@ const navItems = [
 export function AppSidebar() {
   const location = useLocation();
   const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control", "/intelligence", "/admin/sources"]);
+  const [collapsed, setCollapsed] = useState(false);
 
   const toggleExpand = (path: string) => {
     setExpandedItems(prev =>
@@ -120,39 +122,60 @@ export function AppSidebar() {
     return location.pathname.startsWith(path);
   };
 
+  const itemPadding = collapsed ? "px-2" : "px-3";
+
   return (
-    <aside className="w-56 border-r bg-card top-0 overflow-y-auto">
-      <nav className="p-2 space-y-0.5">
+    <aside
+      className={`border-r bg-card top-0 transition-all duration-300 ${
+        collapsed ? "w-16 overflow-y-auto overflow-x-hidden" : "w-56 overflow-y-auto"
+      }`}
+    >
+      <div className="p-2">
+        <button
+          onClick={() => setCollapsed(prev => !prev)}
+          className="w-full flex items-center justify-center rounded-md border text-sm py-1 text-muted-foreground hover:bg-muted transition-colors"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
+      </div>
+      <nav className={`space-y-0.5 ${collapsed ? "px-1" : "p-2"}`}>
         {navItems.map((item) => (
           <div key={item.path}>
             {item.submenu ? (
               <>
                 <button
                   onClick={() => toggleExpand(item.path)}
-                  className="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors"
+                  className={`w-full flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-3 ${itemPadding} py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors`}
+                  title={collapsed ? item.name : undefined}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
                     <item.icon className="h-4 w-4" />
-                    {item.name}
+                    <span className={collapsed ? "sr-only" : "inline"}>{item.name}</span>
                   </div>
-                  {expandedItems.includes(item.path) ? (
-                    <ChevronDown className="h-3 w-3" />
-                  ) : (
-                    <ChevronRight className="h-3 w-3" />
+                  {!collapsed && (
+                    <>
+                      {expandedItems.includes(item.path) ? (
+                        <ChevronDown className="h-3 w-3" />
+                      ) : (
+                        <ChevronRight className="h-3 w-3" />
+                      )}
+                    </>
                   )}
                 </button>
                 {expandedItems.includes(item.path) && (
-                  <div className="ml-4 mt-0.5 space-y-0.5">
+                  <div className={`${collapsed ? "ml-0" : "ml-4"} mt-0.5 space-y-0.5`}>
                     {item.submenu.map((subItem) => (
                       <NavLink
                         key={subItem.path}
                         to={subItem.path}
                         end={subItem.path === item.path}
-                        className="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors"
+                        className={`flex items-center ${collapsed ? "justify-center" : "gap-3"} ${itemPadding} py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors`}
                         activeClassName="bg-muted text-primary font-medium"
+                        title={collapsed ? subItem.name : undefined}
                       >
                         <subItem.icon className="h-4 w-4" />
-                        {subItem.name}
+                        <span className={collapsed ? "sr-only" : "inline"}>{subItem.name}</span>
                       </NavLink>
                     ))}
                   </div>
@@ -162,11 +185,12 @@ export function AppSidebar() {
               <NavLink
                 to={item.path}
                 end={item.path === "/"}
-                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors"
+                className={`flex items-center ${collapsed ? "justify-center" : "gap-3"} ${itemPadding} py-2 text-sm rounded-md text-foreground hover:bg-muted transition-colors`}
                 activeClassName="bg-muted text-primary font-medium"
+                title={collapsed ? item.name : undefined}
               >
                 <item.icon className="h-4 w-4" />
-                {item.name}
+                <span className={collapsed ? "sr-only" : "inline"}>{item.name}</span>
               </NavLink>
             )}
           </div>

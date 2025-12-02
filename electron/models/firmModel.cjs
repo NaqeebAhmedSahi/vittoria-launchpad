@@ -2,6 +2,7 @@
 // POSTGRESQL VERSION (ACTIVE)
 // ============================================================
 const { query } = require("../db/pgConnection.cjs");
+const embeddingClient = require("../services/embeddingClient.cjs");
 
 /**
  * Initialize firms table (PostgreSQL)
@@ -145,8 +146,35 @@ async function createFirm(data) {
     ]
   );
 
-  console.log(`[firmModel] Created firm: ${data.name} (ID: ${result.rows[0].id})`);
-  return result.rows[0].id;
+  const firmId = result.rows[0].id;
+  console.log(`[firmModel] Created firm: ${data.name} (ID: ${firmId})`);
+
+  // Generate and persist embedding for semantic search
+  try {
+    const firmSummary = [
+      data.name || '',
+      data.short_name || '',
+      Array.isArray(data.sector_focus) ? data.sector_focus.join(' ') : (data.sector_focus || ''),
+      Array.isArray(data.asset_classes) ? data.asset_classes.join(' ') : (data.asset_classes || ''),
+      Array.isArray(data.regions) ? data.regions.join(' ') : (data.regions || ''),
+      data.platform_type || '',
+      data.notes_text || '',
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    await embeddingClient.generateAndPersistEmbedding(
+      'firms',
+      firmId,
+      firmSummary,
+      { source: 'firm_profile' }
+    );
+    console.log(`[firmModel] ✅ Generated embedding for firm ${firmId}`);
+  } catch (error) {
+    console.error(`[firmModel] ⚠️ Failed to generate embedding for firm ${firmId}:`, error.message);
+  }
+
+  return firmId;
 }
 
 // ============================================================
@@ -218,6 +246,16 @@ async function listFirms() {
 async function updateFirm(id, data) {
   const serialized = serializeFirmData(data);
 
+  const profileFieldsChanged = [
+    'name',
+    'short_name',
+    'sector_focus',
+    'asset_classes',
+    'regions',
+    'platform_type',
+    'notes_text',
+  ].some(field => data[field] !== undefined);
+
   const fields = [];
   const values = [];
   let paramIndex = 1;
@@ -264,6 +302,36 @@ async function updateFirm(id, data) {
   );
 
   console.log(`[firmModel] Updated firm ID: ${id}`);
+
+  if (profileFieldsChanged) {
+    try {
+      const result = await query('SELECT * FROM firms WHERE id = $1', [id]);
+      const firm = result.rows[0];
+      if (firm) {
+        const firmSummary = [
+          firm.name || '',
+          firm.short_name || '',
+          firm.sector_focus || '',
+          firm.asset_classes || '',
+          firm.regions || '',
+          firm.platform_type || '',
+          firm.notes_text || '',
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        await embeddingClient.generateAndPersistEmbedding(
+          'firms',
+          id,
+          firmSummary,
+          { source: 'firm_update' }
+        );
+        console.log(`[firmModel] ✅ Regenerated embedding for firm ${id}`);
+      }
+    } catch (error) {
+      console.error(`[firmModel] ⚠️ Failed to regenerate embedding for firm ${id}:`, error.message);
+    }
+  }
 }
 
 // ============================================================
@@ -325,6 +393,15 @@ async function updateFirm(id, data) {
  * Delete firm by ID (PostgreSQL)
  */
 async function deleteFirm(id) {
+  try {
+    const vectorStore = require('../services/vectorStore.cjs');
+    // Delete embedding first
+    await vectorStore.deleteEmbedding('firms', id);
+    console.log(`✅ Deleted embedding for firm ${id}`);
+  } catch (error) {
+    console.error(`⚠️ Failed to delete embedding:`, error.message);
+  }
+
   await query(`DELETE FROM firms WHERE id = $1`, [id]);
   console.log(`[firmModel] Deleted firm ID: ${id}`);
 }

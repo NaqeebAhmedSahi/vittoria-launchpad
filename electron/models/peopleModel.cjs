@@ -1,5 +1,6 @@
 // People model for managing individuals associated with firms and teams
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
 
 const PeopleModel = {
   async list(filters = {}) {
@@ -50,7 +51,32 @@ const PeopleModel = {
       data.linkedin_url || null
     ];
     const { rows } = await db.query(query, params);
-    return rows[0];
+    const person = rows[0];
+
+    // Generate and persist embedding
+    try {
+      const personSummary = [
+        `${data.first_name || ''} ${data.last_name || ''}`.trim(),
+        data.email || '',
+        data.phone || '',
+        data.role || '',
+        data.linkedin_url || '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'people',
+        person.id,
+        personSummary,
+        { source: 'person_profile' }
+      );
+      console.log(`[peopleModel] ✅ Generated embedding for person ${person.id}`);
+    } catch (error) {
+      console.error(`[peopleModel] ⚠️ Failed to generate embedding for person ${person.id}:`, error.message);
+    }
+
+    return person;
   },
   
   async update(id, data) {
@@ -105,10 +131,47 @@ const PeopleModel = {
     values.push(id);
     const query = `UPDATE people SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
     const { rows } = await db.query(query, values);
-    return rows[0];
+    const person = rows[0];
+
+    // Update embedding if profile fields changed
+    const profileFieldsChanged = data.name !== undefined || data.email !== undefined;
+    if (profileFieldsChanged) {
+      try {
+        const vectorStore = require('../services/vectorStore.cjs');
+        const embeddingClient = require('../services/embeddingClient.cjs');
+        const summary = [
+          person.name,
+          person.email || '',
+          person.phone || '',
+          person.role || '',
+          person.linkedin_url || ''
+        ].filter(Boolean).join(' | ');
+
+        await embeddingClient.generateAndPersistEmbedding(
+          'people',
+          id,
+          summary,
+          { source: 'people_update' }
+        );
+        console.log(`✅ Updated embedding for person ${id}`);
+      } catch (error) {
+        console.error(`⚠️ Failed to update embedding:`, error.message);
+      }
+    }
+
+    return person;
   },
   
   async delete(id) {
+    try {
+      const vectorStore = require('../services/vectorStore.cjs');
+      // Delete embedding first
+      await vectorStore.deleteEmbedding('people', id);
+      console.log(`✅ Deleted embedding for person ${id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to delete embedding:`, error.message);
+    }
+
     await db.query('DELETE FROM people WHERE id = $1', [id]);
     return true;
   },

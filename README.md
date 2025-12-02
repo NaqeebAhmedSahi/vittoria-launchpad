@@ -136,7 +136,8 @@ vittoria-launchpad/
 
 * Node.js (use `nvm` recommended)
 * npm
-* PostgreSQL 13+
+* PostgreSQL 13+ (16+ recommended)
+* **pgvector extension** for semantic search (see installation below)
 * Ubuntu / Windows / macOS
 
 ---
@@ -181,6 +182,16 @@ sudo apt update
 sudo apt install -y postgresql postgresql-contrib
 ```
 
+**Install pgvector extension for semantic search:**
+
+```bash
+# For PostgreSQL 16
+sudo apt install postgresql-16-pgvector
+
+# For other versions, replace 16 with your version number
+# e.g., postgresql-15-pgvector, postgresql-14-pgvector
+```
+
 Start and enable the service:
 
 ```bash
@@ -202,6 +213,18 @@ Download:
 * Set a password for the `postgres` superuser
 * Optionally install pgAdmin for GUI management
 
+**Install pgvector extension:**
+
+After installing PostgreSQL, download and install pgvector:
+👉 [https://github.com/pgvector/pgvector/releases](https://github.com/pgvector/pgvector/releases)
+
+Or compile from source (requires Visual Studio Build Tools):
+```powershell
+git clone https://github.com/pgvector/pgvector.git
+cd pgvector
+# Follow Windows compilation instructions in pgvector README
+```
+
 #### Option B: Chocolatey (Command-line)
 
 ```powershell
@@ -216,9 +239,7 @@ setx PATH "%PATH%;C:\Program Files\PostgreSQL\16\bin"
 
 (Replace `16` with your installed version.)
 
----
-
-### **macOS (Homebrew)**
+---### **macOS (Homebrew)**
 
 ```bash
 brew install postgresql
@@ -239,6 +260,12 @@ sudo -u postgres createuser -P vittoria_user
 sudo -u postgres createdb -O vittoria_user vittoria_db
 ```
 
+**Enable pgvector extension (as postgres superuser):**
+
+```bash
+sudo -u postgres psql -d vittoria_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
 You will be prompted for a password — keep it for the app config.
 
 ---
@@ -256,6 +283,10 @@ Inside the PostgreSQL prompt:
 ```sql
 CREATE USER vittoria_user WITH PASSWORD 'your_password';
 CREATE DATABASE vittoria_db OWNER vittoria_user;
+
+-- Enable pgvector extension
+\c vittoria_db
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 ---
@@ -277,6 +308,14 @@ psql -h localhost -U vittoria_user -d vittoria_db
 ```
 
 If you get a `vittoria_db=#` prompt, the credentials are correct.
+
+**Verify pgvector is installed:**
+
+```sql
+SELECT * FROM pg_extension WHERE extname = 'vector';
+```
+
+You should see one row with `vector` extension.
 
 ---
 
@@ -305,13 +344,19 @@ After you save:
 
 1. The app writes the connection into local encrypted settings
 2. It connects to PostgreSQL using these credentials
-3. It runs all SQL migrations in `migrations/`
-4. It initializes:
+3. It attempts to create the pgvector extension (will show warning if permission denied)
+4. It runs all SQL migrations in `migrations/` including embedding column additions
+5. It initializes:
 
    * system settings
    * admin user storage
    * audit triggers
    * candidate / intake / source / finance tables
+   * **embedding columns for semantic search (vector(384) with pgvector)**
+
+**Note:** If the app cannot create the pgvector extension due to permissions, you'll see a warning.
+In this case, you must manually create the extension as superuser (see step 2 above).
+The app will work normally for all features except semantic search until the extension is created.
 
 ---
 

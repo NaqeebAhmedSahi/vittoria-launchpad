@@ -11,6 +11,8 @@ const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
 const ocrService = require("../services/ocrService.cjs");
 const { encryptFile, decryptFile } = require("../services/encryptionService.cjs");
+const embeddingClient = require("../services/embeddingClient.cjs");
+const documentChunker = require("../services/documentChunker.cjs");
 
 // pdfjs-dist for reading PDF annotations (link URIs)
 let pdfjsLib;
@@ -1490,6 +1492,41 @@ Return ONLY the candidate JSON object with confidence and provenance metadata.`;
         candidateId
       );
       status = "Parsed";
+
+      // Generate embedding for intake_files for duplicate detection
+      try {
+        const parsedText = parsedCv.raw_text || parsedCv.full_text || '';
+        await embeddingClient.generateAndPersistEmbedding(
+          'intake_files',
+          intakeId,
+          parsedText,
+          { source: 'parsed_text' }
+        );
+        console.log(`[processParsedCv] ✅ Generated embedding for intake_file ${intakeId}`);
+
+        // Detect duplicate intake files
+        const duplicates = await embeddingClient.detectDuplicates(intakeId, 0.15);
+        if (duplicates.length > 0) {
+          console.log(`[processParsedCv] ⚠️ Found ${duplicates.length} potential duplicate intake files for ${intakeId}`);
+          // TODO: Notify UI about duplicates for manual review
+        }
+
+        // Chunk document for RAG workflows
+        const chunkResult = await documentChunker.processIntakeFileChunks(
+          intakeId,
+          candidateId,
+          parsedText,
+          { batchSize: 10 }
+        );
+        if (chunkResult.success) {
+          console.log(`[processParsedCv] ✅ Created ${chunkResult.chunksCreated} chunks for intake_file ${intakeId}`);
+        } else {
+          console.log(`[processParsedCv] ⚠️ Failed to create chunks for intake_file ${intakeId}`);
+        }
+      } catch (error) {
+        console.error(`[processParsedCv] ⚠️ Failed to generate embedding/chunks for intake_file ${intakeId}:`, error.message);
+        // Don't fail processing if embedding/chunking generation fails
+      }
 
       // Merge candidateJson into parsedCv so all fields are available in parsed_json
       const mergedParsedJson = {

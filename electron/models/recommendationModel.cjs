@@ -1,5 +1,7 @@
 // Recommendation events model
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
+const vectorStore = require('../services/vectorStore.cjs');
 
 const RecommendationModel = {
   async create(data) {
@@ -18,7 +20,28 @@ const RecommendationModel = {
     ];
     
     const { rows } = await db.query(query, params);
-    return rows[0];
+    const recommendation = rows[0];
+    
+    // Generate embedding for recommendation
+    const recommendationId = recommendation.id;
+    try {
+      const summary = [
+        `strength: ${recommendation.strength}`,
+        recommendation.comment || ''
+      ].filter(Boolean).join(' | ');
+      
+      await embeddingClient.generateAndPersistEmbedding(
+        'recommendation_events',
+        recommendationId,
+        summary,
+        { source: 'recommendation' }
+      );
+      console.log(`✅ Generated embedding for recommendation ${recommendationId}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to generate embedding for recommendation:`, error.message);
+    }
+    
+    return recommendation;
   },
 
   async listByMandate(mandateId) {
@@ -46,6 +69,64 @@ const RecommendationModel = {
     
     const { rows } = await db.query(query, [candidateId, mandateId]);
     return rows;
+  },
+
+  async update(id, data) {
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (data.strength !== undefined) {
+      fields.push(`strength = $${paramIndex++}`);
+      values.push(data.strength);
+    }
+
+    if (data.comment !== undefined) {
+      fields.push(`comment = $${paramIndex++}`);
+      values.push(data.comment);
+    }
+
+    if (fields.length === 0) {
+      return await db.query('SELECT * FROM recommendation_events WHERE id = $1', [id]).then(r => r.rows[0]);
+    }
+
+    values.push(id);
+    const query = `UPDATE recommendation_events SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+    const { rows } = await db.query(query, values);
+    const recommendation = rows[0];
+
+    // Update embedding on change
+    try {
+      const summary = [
+        `strength: ${recommendation.strength}`,
+        recommendation.comment || ''
+      ].filter(Boolean).join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'recommendation_events',
+        id,
+        summary,
+        { source: 'recommendation_update' }
+      );
+      console.log(`✅ Updated embedding for recommendation ${id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to update embedding:`, error.message);
+    }
+
+    return recommendation;
+  },
+
+  async delete(id) {
+    try {
+      // Delete embedding first
+      await vectorStore.deleteEmbedding('recommendation_events', id);
+      console.log(`✅ Deleted embedding for recommendation ${id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to delete embedding:`, error.message);
+    }
+
+    await db.query('DELETE FROM recommendation_events WHERE id = $1', [id]);
+    return true;
   }
 };
 

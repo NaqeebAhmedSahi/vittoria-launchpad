@@ -1,5 +1,7 @@
 // Team model for managing teams within firms
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
+const vectorStore = require('../services/vectorStore.cjs');
 
 const TeamModel = {
   async list(firmId = null) {
@@ -29,7 +31,28 @@ const TeamModel = {
     `;
     const params = [data.name, data.firm_id, data.description || null];
     const { rows } = await db.query(query, params);
-    return rows[0];
+    const team = rows[0];
+
+    // Generate embedding for team
+    const teamId = team.id;
+    try {
+      const summary = [
+        team.name,
+        team.description || ''
+      ].filter(Boolean).join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'teams',
+        teamId,
+        summary,
+        { source: 'team_profile' }
+      );
+      console.log(`✅ Generated embedding for team ${teamId}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to generate embedding for team:`, error.message);
+    }
+
+    return team;
   },
   
   async update(id, data) {
@@ -59,10 +82,41 @@ const TeamModel = {
     values.push(id);
     const query = `UPDATE teams SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
     const { rows } = await db.query(query, values);
-    return rows[0];
+    const team = rows[0];
+
+    // Update embedding if profile fields changed
+    const profileFieldsChanged = data.name !== undefined || data.description !== undefined;
+    if (profileFieldsChanged) {
+      try {
+        const summary = [
+          team.name,
+          team.description || ''
+        ].filter(Boolean).join(' | ');
+
+        await embeddingClient.generateAndPersistEmbedding(
+          'teams',
+          id,
+          summary,
+          { source: 'team_update' }
+        );
+        console.log(`✅ Updated embedding for team ${id}`);
+      } catch (error) {
+        console.error(`⚠️ Failed to update embedding:`, error.message);
+      }
+    }
+
+    return team;
   },
   
   async delete(id) {
+    try {
+      // Delete embedding first
+      await vectorStore.deleteEmbedding('teams', id);
+      console.log(`✅ Deleted embedding for team ${id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to delete embedding:`, error.message);
+    }
+
     await db.query('DELETE FROM teams WHERE id = $1', [id]);
     return true;
   },

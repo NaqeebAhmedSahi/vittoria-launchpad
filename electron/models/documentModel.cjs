@@ -1,5 +1,6 @@
 // electron/models/documentModel.cjs
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
 
 const DocumentModel = {
   /**
@@ -121,7 +122,32 @@ const DocumentModel = {
         data.is_confidential || false
       ]
     );
-    return result.rows[0].id;
+    const documentId = result.rows[0].id;
+
+    // Generate and persist embedding
+    try {
+      const documentSummary = [
+        data.name || '',
+        data.description || '',
+        data.category || '',
+        data.file_type || '',
+        Array.isArray(data.tags) ? data.tags.join(' ') : (data.tags || ''),
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'documents',
+        documentId,
+        documentSummary,
+        { source: 'document' }
+      );
+      console.log(`[documentModel] ✅ Generated embedding for document ${documentId}`);
+    } catch (error) {
+      console.error(`[documentModel] ⚠️ Failed to generate embedding for document ${documentId}:`, error.message);
+    }
+
+    return documentId;
   },
 
   /**
@@ -191,6 +217,15 @@ const DocumentModel = {
    * @returns {Promise<void>}
    */
   async delete(id) {
+    try {
+      const vectorStore = require('../services/vectorStore.cjs');
+      // Delete embedding first
+      await vectorStore.deleteEmbedding('documents', id);
+      console.log(`✅ Deleted embedding for document ${id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to delete embedding:`, error.message);
+    }
+
     await db.query('DELETE FROM documents WHERE id = $1', [id]);
   },
 

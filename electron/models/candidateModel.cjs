@@ -2,6 +2,7 @@
 // POSTGRESQL VERSION (ACTIVE)
 // ============================================================
 const { query, getClient } = require("../db/pgConnection.cjs");
+const embeddingClient = require("../services/embeddingClient.cjs");
 
 /**
  * Helper: Safely parse JSON field (handles JSONB, TEXT, and legacy comma-separated strings)
@@ -142,7 +143,34 @@ async function createDraftCandidate(parsedCv) {
     ]
   );
 
-  return result.rows[0].id;
+  const candidateId = result.rows[0].id;
+
+  // Generate and persist embedding for semantic search & duplicate detection
+  try {
+    const profileSummary = [
+      parsedCv.name || parsedCv.full_name || '',
+      parsedCv.current_title || '',
+      parsedCv.current_firm || '',
+      parsedCv.seniority || '',
+      Array.isArray(parsedCv.sectors) ? parsedCv.sectors.join(' ') : (parsedCv.sectors || ''),
+      Array.isArray(parsedCv.functions) ? parsedCv.functions.join(' ') : (parsedCv.functions || ''),
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    await embeddingClient.generateAndPersistEmbedding(
+      'candidates',
+      candidateId,
+      profileSummary,
+      { source: 'parsed' }
+    );
+    console.log(`[candidateModel] ✅ Generated embedding for candidate ${candidateId}`);
+  } catch (error) {
+    console.error(`[candidateModel] ⚠️ Failed to generate embedding for candidate ${candidateId}:`, error.message);
+    // Don't fail candidate creation if embedding generation fails
+  }
+
+  return candidateId;
 }
 
 // ============================================================
@@ -364,6 +392,19 @@ async function updateCandidate(candidateId, updates) {
   const fields = [];
   const values = [];
   let paramIndex = 1;
+
+  // Track if any profile fields changed (for embedding regeneration)
+  const profileFieldsChanged = [
+    'name',
+    'current_title',
+    'current_firm',
+    'location',
+    'sectors',
+    'functions',
+    'asset_classes',
+    'geographies',
+    'seniority',
+  ].some(field => updates[field] !== undefined);
   
   if (updates.name !== undefined) {
     fields.push(`name = $${paramIndex++}`);
@@ -416,6 +457,36 @@ async function updateCandidate(candidateId, updates) {
   const sql = `UPDATE candidates SET ${fields.join(', ')} WHERE id = $${paramIndex}`;
   
   await query(sql, values);
+
+  // Regenerate embedding if profile fields changed
+  if (profileFieldsChanged) {
+    try {
+      const candidate = await getCandidateById(candidateId);
+      if (candidate) {
+        const profileSummary = [
+          candidate.name || '',
+          candidate.current_title || '',
+          candidate.current_firm || '',
+          candidate.seniority || '',
+          Array.isArray(candidate.sectors) ? candidate.sectors.join(' ') : (candidate.sectors || ''),
+          Array.isArray(candidate.functions) ? candidate.functions.join(' ') : (candidate.functions || ''),
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        await embeddingClient.generateAndPersistEmbedding(
+          'candidates',
+          candidateId,
+          profileSummary,
+          { source: 'enriched' }
+        );
+        console.log(`[candidateModel] ✅ Regenerated embedding for candidate ${candidateId}`);
+      }
+    } catch (error) {
+      console.error(`[candidateModel] ⚠️ Failed to regenerate embedding for candidate ${candidateId}:`, error.message);
+      // Don't fail the update if embedding regeneration fails
+    }
+  }
 }
 
 // ============================================================

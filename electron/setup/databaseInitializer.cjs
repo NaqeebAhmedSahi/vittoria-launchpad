@@ -5,6 +5,110 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * Create pgvector extension in the database
+ * This must be done before running migrations that use vector types
+ */
+async function createPgvectorExtension({ host = 'localhost', port = 5432, username, password, dbName = 'vittoria_launchpad' }) {
+  console.log(`[databaseInitializer] Creating pgvector extension in: ${dbName}`);
+  
+  const { Client } = require('pg');
+  
+  const client = new Client({
+    host,
+    port,
+    user: username,
+    password,
+    database: dbName,
+    connectionTimeoutMillis: 10000,
+  });
+
+  try {
+    await client.connect();
+    
+    // Try to create pgvector extension
+    try {
+      await client.query('CREATE EXTENSION IF NOT EXISTS vector;');
+      console.log('[databaseInitializer] ✓ pgvector extension created successfully');
+      await client.end();
+      return { success: true };
+    } catch (extError) {
+      // If user doesn't have permission, try with postgres superuser
+      if (extError.message.includes('permission denied')) {
+        console.log('[databaseInitializer] Regular user lacks permission, trying with postgres superuser...');
+        await client.end();
+        
+        // Try to create extension as postgres superuser with empty password (peer auth)
+        const superClient = new Client({
+          host,
+          port,
+          user: 'postgres',
+          password: '', // Peer authentication on Linux
+          database: dbName,
+          connectionTimeoutMillis: 5000,
+        });
+        
+        try {
+          await superClient.connect();
+          await superClient.query('CREATE EXTENSION IF NOT EXISTS vector;');
+          console.log('[databaseInitializer] ✓ pgvector extension created successfully (as postgres superuser)');
+          await superClient.end();
+          return { success: true };
+        } catch (superError) {
+          await superClient.end().catch(() => {});
+          
+          // Final fallback: Create a helper script
+          console.warn('[databaseInitializer] ⚠️  Could not create pgvector extension automatically');
+          console.warn('[databaseInitializer] ⚠️  Creating helper script...');
+          
+          const { app } = require('electron');
+          const os = require('os');
+          const scriptPath = path.join(app.getPath('userData'), 'create-pgvector-extension.sh');
+          
+          const scriptContent = `#!/bin/bash
+# Helper script to create pgvector extension
+# Run this script once to enable semantic search features
+
+echo "Creating pgvector extension..."
+sudo -u postgres psql -d ${dbName} -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "✅ pgvector extension created successfully!"
+    echo "You can now restart the application and embeddings will work."
+else
+    echo "❌ Failed to create pgvector extension"
+    echo "Please ensure:"
+    echo "  1. PostgreSQL is running"
+    echo "  2. pgvector is installed: sudo apt install postgresql-16-pgvector"
+    echo "  3. You have sudo access"
+fi
+`;
+          
+          fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
+          console.warn(`[databaseInitializer] ⚠️  Helper script created: ${scriptPath}`);
+          console.warn('[databaseInitializer] ⚠️  Run this script to enable embeddings: bash ' + scriptPath);
+          console.warn('[databaseInitializer] ⚠️  Application will continue but embeddings will not work until extension is created');
+          
+          return { success: false, error: 'Permission denied', helperScript: scriptPath };
+        }
+      } else {
+        console.error('[databaseInitializer] Error creating pgvector extension:', extError.message);
+        await client.end();
+        return { success: false, error: extError.message };
+      }
+    }
+    
+  } catch (error) {
+    console.error('[databaseInitializer] Error connecting to database:', error.message);
+    try {
+      await client.end();
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Create the application database if it doesn't exist
  */
 async function createDatabase({ host = 'localhost', port = 5432, username, password, dbName = 'vittoria_launchpad' }) {
@@ -40,6 +144,10 @@ async function createDatabase({ host = 'localhost', port = 5432, username, passw
     console.log(`[databaseInitializer] ✓ Database '${dbName}' created successfully`);
     
     await adminClient.end();
+    
+    // Create pgvector extension in the new database
+    await createPgvectorExtension({ host, port, username, password, dbName });
+    
     return { success: true, existed: false, message: 'Database created successfully' };
 
   } catch (error) {
@@ -125,185 +233,6 @@ async function initializeSchema({ host = 'localhost', port = 5432, username, pas
 /**
  * Run migrations to add missing columns to existing tables
  */
-async function runMigrations(client) {
-  console.log('[databaseInitializer] Running migrations...');
-  
-  try {
-    // Check if salt column exists in users table
-    const saltCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'users' 
-        AND column_name = 'salt'
-    `);
-    
-    if (saltCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding salt column to users table...');
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN salt VARCHAR(255) DEFAULT '' NOT NULL
-      `);
-      console.log('[databaseInitializer] ✓ Added salt column');
-    }
-    
-    // Check if is_active column exists
-    const isActiveCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'users' 
-        AND column_name = 'is_active'
-    `);
-    
-    if (isActiveCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding is_active column to users table...');
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN is_active BOOLEAN DEFAULT true
-      `);
-      console.log('[databaseInitializer] ✓ Added is_active column');
-    }
-    
-    // Check if last_login column exists
-    const lastLoginCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'users' 
-        AND column_name = 'last_login'
-    `);
-    
-    if (lastLoginCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding last_login column to users table...');
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN last_login TIMESTAMP
-      `);
-      console.log('[databaseInitializer] ✓ Added last_login column');
-    }
-    
-    console.log('[databaseInitializer] ✓ Migrations completed');
-  } catch (error) {
-    console.error('[databaseInitializer] Migration error:', error.message);
-    // Don't fail the whole setup if migrations fail
-  }
-  
-  // Add missing columns to intake_files table
-  try {
-    console.log('[databaseInitializer] Checking intake_files table columns...');
-    
-    // Check if file_path column exists
-    const filePathCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'file_path'
-    `);
-    
-    if (filePathCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding file_path column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN file_path TEXT`);
-      console.log('[databaseInitializer] ✓ Added file_path column');
-    }
-    
-    // Check if is_encrypted column exists
-    const isEncryptedCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'is_encrypted'
-    `);
-    
-    if (isEncryptedCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding is_encrypted column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN is_encrypted BOOLEAN DEFAULT false`);
-      console.log('[databaseInitializer] ✓ Added is_encrypted column');
-    }
-    
-    // Check if encryption_version column exists
-    const encryptionVersionCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'encryption_version'
-    `);
-    
-    if (encryptionVersionCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding encryption_version column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN encryption_version VARCHAR(50)`);
-      console.log('[databaseInitializer] ✓ Added encryption_version column');
-    }
-    
-    // Check if parsed_at column exists
-    const parsedAtCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'parsed_at'
-    `);
-    
-    if (parsedAtCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding parsed_at column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN parsed_at TIMESTAMP`);
-      console.log('[databaseInitializer] ✓ Added parsed_at column');
-    }
-    
-    // Check if ocr_progress column exists
-    const ocrProgressCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'ocr_progress'
-    `);
-    
-    if (ocrProgressCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding ocr_progress column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN ocr_progress INTEGER DEFAULT 0`);
-      console.log('[databaseInitializer] ✓ Added ocr_progress column');
-    }
-    
-    // Check if ocr_method column exists
-    const ocrMethodCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'ocr_method'
-    `);
-    
-    if (ocrMethodCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding ocr_method column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN ocr_method VARCHAR(50)`);
-      console.log('[databaseInitializer] ✓ Added ocr_method column');
-    }
-    
-  } catch (error) {
-    console.error('[databaseInitializer] Error adding intake_files columns:', error.message);
-  }
-  
-  // Fix sequences for all tables (important after manual inserts or migrations)
-  try {
-    console.log('[databaseInitializer] Fixing table sequences...');
-    
-    const tables = ['users', 'firms', 'mandates', 'candidates', 'intake_files', 'match_scores', 'sources'];
-    for (const table of tables) {
-      await client.query(`
-        SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE(MAX(id), 1), true) FROM ${table}
-      `);
-    }
-    
-    console.log('[databaseInitializer] ✓ Sequences fixed');
-  } catch (error) {
-    console.error('[databaseInitializer] Error fixing sequences:', error.message);
-  }
-}
-
 /**
  * Insert default application settings
  */
@@ -1167,14 +1096,31 @@ async function ensureAllTablesExist() {
     `);
     console.log('[databaseInitializer] ✓ Audit triggers configured');
     
-    // Run migrations to add any missing columns
-    console.log('[databaseInitializer] Running migrations to add missing columns...');
-    const client = await db.getClient();
+    // Ensure pgvector extension exists before running migrations
+    console.log('[databaseInitializer] Ensuring pgvector extension exists...');
+    const extResult = await createPgvectorExtension({
+      host: client.host,
+      port: client.port,
+      username: client.user,
+      password: client.password,
+      dbName: client.database
+    });
+    
+    if (!extResult.success && extResult.helperScript) {
+      console.warn('[databaseInitializer] ⚠️  pgvector extension could not be created automatically');
+      console.warn(`[databaseInitializer] ⚠️  Helper script available: ${extResult.helperScript}`);
+      console.warn('[databaseInitializer] ⚠️  Run: bash ' + extResult.helperScript);
+    }
+    
+    // Run migrations to add any missing columns and pgvector support
+    console.log('[databaseInitializer] Running migrations to add pgvector embeddings...');
     try {
-      await runMigrations(client);
-      console.log('[databaseInitializer] ✓ Migrations completed');
-    } finally {
-      client.release();
+      const migrationRunner = require('../services/migrationRunner.cjs');
+      const result = await migrationRunner.runAllMigrations();
+      console.log(`[databaseInitializer] ✓ Migrations completed: ${result.applied.length} applied, ${result.skipped.length} skipped`);
+    } catch (error) {
+      console.error('[databaseInitializer] Warning: Migration error (continuing):', error.message);
+      // Don't fail if migrations have issues - continue with app startup
     }
     
     console.log('[databaseInitializer] ✓ All tables verified');

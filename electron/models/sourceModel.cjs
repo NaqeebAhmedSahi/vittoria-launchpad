@@ -2,6 +2,8 @@
 // id, name, email, role, organisation, sectors, geographies, seniority_level
 
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
+const vectorStore = require('../services/vectorStore.cjs');
 
 const SourceModel = {
   async list() {
@@ -27,7 +29,127 @@ const SourceModel = {
       data.seniority_level
     ];
     const { rows } = await db.query(query, params);
-    return rows[0];
+    const source = rows[0];
+
+    // Generate and persist embedding
+    try {
+      const sourceSummary = [
+        data.name || '',
+        data.email || '',
+        data.role || '',
+        data.organisation || '',
+        Array.isArray(data.sectors) ? data.sectors.join(' ') : (data.sectors || ''),
+        Array.isArray(data.geographies) ? data.geographies.join(' ') : (data.geographies || ''),
+        data.seniority_level || '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'sources',
+        source.id,
+        sourceSummary,
+        { source: 'source_profile' }
+      );
+      console.log(`✅ Generated embedding for source ${source.id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to generate embedding for source:`, error.message);
+    }
+
+    return source;
+  },
+
+  async update(id, data) {
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+    
+    if (data.name !== undefined) {
+      fields.push(`name = $${paramIndex++}`);
+      values.push(data.name);
+    }
+    
+    if (data.email !== undefined) {
+      fields.push(`email = $${paramIndex++}`);
+      values.push(data.email);
+    }
+    
+    if (data.role !== undefined) {
+      fields.push(`role = $${paramIndex++}`);
+      values.push(data.role);
+    }
+    
+    if (data.organisation !== undefined) {
+      fields.push(`organisation = $${paramIndex++}`);
+      values.push(data.organisation);
+    }
+    
+    if (data.sectors !== undefined) {
+      fields.push(`sectors = $${paramIndex++}`);
+      values.push(JSON.stringify(data.sectors || []));
+    }
+    
+    if (data.geographies !== undefined) {
+      fields.push(`geographies = $${paramIndex++}`);
+      values.push(JSON.stringify(data.geographies || []));
+    }
+    
+    if (data.seniority_level !== undefined) {
+      fields.push(`seniority_level = $${paramIndex++}`);
+      values.push(data.seniority_level);
+    }
+    
+    if (fields.length === 0) {
+      return await this.getById(id);
+    }
+    
+    values.push(id);
+    const query = `UPDATE sources SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+    const { rows } = await db.query(query, values);
+    const source = rows[0];
+
+    // Update embedding if profile fields changed
+    const profileFieldsChanged = data.name !== undefined || data.role !== undefined;
+    if (profileFieldsChanged) {
+      try {
+        const sourceSummary = [
+          source.name || '',
+          source.email || '',
+          source.role || '',
+          source.organisation || '',
+          Array.isArray(source.sectors) ? source.sectors.join(' ') : (source.sectors || ''),
+          Array.isArray(source.geographies) ? source.geographies.join(' ') : (source.geographies || ''),
+          source.seniority_level || '',
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        await embeddingClient.generateAndPersistEmbedding(
+          'sources',
+          id,
+          sourceSummary,
+          { source: 'source_update' }
+        );
+        console.log(`✅ Updated embedding for source ${id}`);
+      } catch (error) {
+        console.error(`⚠️ Failed to update embedding:`, error.message);
+      }
+    }
+
+    return source;
+  },
+
+  async delete(id) {
+    try {
+      // Delete embedding first
+      await vectorStore.deleteEmbedding('sources', id);
+      console.log(`✅ Deleted embedding for source ${id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to delete embedding:`, error.message);
+    }
+
+    await db.query('DELETE FROM sources WHERE id = $1', [id]);
+    return true;
   },
 
   async getOrgPattern() {

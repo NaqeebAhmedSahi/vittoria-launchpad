@@ -2,6 +2,7 @@
 // POSTGRESQL VERSION (ACTIVE)
 // ============================================================
 const { query } = require("../db/pgConnection.cjs");
+const embeddingClient = require("../services/embeddingClient.cjs");
 
 /**
  * Helper: Safely parse JSON field (handles JSONB, TEXT, and legacy comma-separated strings)
@@ -180,8 +181,37 @@ async function createMandate(data) {
     ]
   );
 
-  console.log(`[mandateModel] Created mandate: ${data.name} (ID: ${result.rows[0].id})`);
-  return result.rows[0].id;
+  const mandateId = result.rows[0].id;
+  console.log(`[mandateModel] Created mandate: ${data.name} (ID: ${mandateId})`);
+
+  // Generate and persist embedding for semantic search & mandate matching
+  try {
+    const mandateSummary = [
+      data.name || '',
+      data.primary_sector || '',
+      Array.isArray(data.sectors) ? data.sectors.join(' ') : (data.sectors || ''),
+      Array.isArray(data.functions) ? data.functions.join(' ') : (data.functions || ''),
+      Array.isArray(data.asset_classes) ? data.asset_classes.join(' ') : (data.asset_classes || ''),
+      Array.isArray(data.regions) ? data.regions.join(' ') : (data.regions || ''),
+      data.seniority_min ? `Seniority: ${data.seniority_min}-${data.seniority_max || 'C-Suite'}` : '',
+      data.location || '',
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    await embeddingClient.generateAndPersistEmbedding(
+      'mandates',
+      mandateId,
+      mandateSummary,
+      { source: 'mandate_spec' }
+    );
+    console.log(`[mandateModel] ✅ Generated embedding for mandate ${mandateId}`);
+  } catch (error) {
+    console.error(`[mandateModel] ⚠️ Failed to generate embedding for mandate ${mandateId}:`, error.message);
+    // Don't fail mandate creation if embedding generation fails
+  }
+
+  return mandateId;
 }
 
 // ============================================================
@@ -291,6 +321,19 @@ async function listMandates(options = {}) {
 async function updateMandate(id, data) {
   const serialized = serializeMandateData(data);
 
+  // Track if any mandate spec fields changed (for embedding regeneration)
+  const mandateFieldsChanged = [
+    'name',
+    'primary_sector',
+    'sectors',
+    'functions',
+    'asset_classes',
+    'regions',
+    'seniority_min',
+    'seniority_max',
+    'location',
+  ].some(field => data[field] !== undefined);
+
   const fields = [];
   const values = [];
   let paramIndex = 1;
@@ -349,6 +392,38 @@ async function updateMandate(id, data) {
   );
 
   console.log(`[mandateModel] Updated mandate ID: ${id}`);
+
+  // Regenerate embedding if mandate spec fields changed
+  if (mandateFieldsChanged) {
+    try {
+      const mandate = await getMandateById(id);
+      if (mandate) {
+        const mandateSummary = [
+          mandate.name || '',
+          mandate.primary_sector || '',
+          Array.isArray(mandate.sectors) ? mandate.sectors.join(' ') : (mandate.sectors || ''),
+          Array.isArray(mandate.functions) ? mandate.functions.join(' ') : (mandate.functions || ''),
+          Array.isArray(mandate.asset_classes) ? mandate.asset_classes.join(' ') : (mandate.asset_classes || ''),
+          Array.isArray(mandate.regions) ? mandate.regions.join(' ') : (mandate.regions || ''),
+          mandate.seniority_min ? `Seniority: ${mandate.seniority_min}-${mandate.seniority_max || 'C-Suite'}` : '',
+          mandate.location || '',
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        await embeddingClient.generateAndPersistEmbedding(
+          'mandates',
+          id,
+          mandateSummary,
+          { source: 'mandate_update' }
+        );
+        console.log(`[mandateModel] ✅ Regenerated embedding for mandate ${id}`);
+      }
+    } catch (error) {
+      console.error(`[mandateModel] ⚠️ Failed to regenerate embedding for mandate ${id}:`, error.message);
+      // Don't fail the update if embedding regeneration fails
+    }
+  }
 }
 
 // ============================================================
@@ -426,6 +501,15 @@ async function updateMandate(id, data) {
  * Delete mandate by ID (PostgreSQL)
  */
 async function deleteMandate(id) {
+  try {
+    const vectorStore = require('../services/vectorStore.cjs');
+    // Delete embedding first
+    await vectorStore.deleteEmbedding('mandates', id);
+    console.log(`✅ Deleted embedding for mandate ${id}`);
+  } catch (error) {
+    console.error(`⚠️ Failed to delete embedding:`, error.message);
+  }
+
   await query(`DELETE FROM mandates WHERE id = $1`, [id]);
   console.log(`[mandateModel] Deleted mandate ID: ${id}`);
 }

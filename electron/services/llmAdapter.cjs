@@ -92,6 +92,234 @@ async function chat(messages, opts = {}) {
   const temperature =
     typeof opts.temperature === "number" ? opts.temperature : 0;
 
+  // -------- Local (Ollama) provider via LangChain (preferred) then native HTTP --------
+  // If the active provider is "local", we first try to use LangChain's ChatOllama
+  // model for better integration (streaming, tooling, etc.). If LangChain isn't
+  // available or fails, we fall back to the native Ollama HTTP API.
+  if (
+    provider &&
+    provider.name === "local"
+  ) {
+    try {
+      console.log("[llmAdapter] Attempting LangChain ChatOllama...");
+      // Try to import ChatOllama from @langchain/community. Different versions
+      // expose it via different entry points, so we try a couple of options.
+      let ChatOllama;
+      try {
+        const mod = await import("@langchain/community/chat_models/ollama");
+        ChatOllama = mod.ChatOllama;
+      } catch (e) {
+        try {
+          const modAlt = await import("@langchain/community");
+          ChatOllama = modAlt.ChatOllama;
+        } catch (e2) {
+          // rethrow the original error to simplify logging
+          throw e;
+        }
+      }
+
+      if (!ChatOllama) {
+        throw new Error("ChatOllama not found in @langchain/community");
+      }
+
+      const baseUrl =
+        (provider.info && provider.info.baseUrl) ||
+        "http://localhost:11434";
+      const modelName =
+        model ||
+        (provider.info && provider.info.model) ||
+        "llama3.1";
+
+      const chatModel = new ChatOllama({
+        baseUrl,
+        model: modelName,
+        temperature,
+      });
+
+      console.log("[llmAdapter] Using ChatOllama with:", {
+        baseUrl,
+        model: modelName,
+        temperature,
+      });
+
+      const {
+        HumanMessage,
+        SystemMessage,
+      } = await import("@langchain/core/messages");
+
+      const langchainMessages = (Array.isArray(messages) ? messages : [
+        { role: "user", content: String(messages) },
+      ]).map((m) => {
+        if (m.role === "system") return new SystemMessage(m.content);
+        return new HumanMessage(m.content);
+      });
+
+      let resp;
+      if (typeof chatModel.invoke === "function") {
+        console.log("[llmAdapter] Using ChatOllama.invoke(langchainMessages)");
+        resp = await chatModel.invoke(langchainMessages);
+      } else if (typeof chatModel.call === "function") {
+        console.log("[llmAdapter] Using ChatOllama.call(langchainMessages)");
+        resp = await chatModel.call(langchainMessages);
+      } else {
+        console.log(
+          "[llmAdapter] ChatOllama has no invoke/call methods, attempting generate()"
+        );
+        if (typeof chatModel.generate === "function") {
+          const gen = await chatModel.generate([langchainMessages]);
+          const first = gen?.generations?.[0]?.[0];
+          if (first) {
+            if (first.text) return first.text;
+            if (first.message && first.message.content)
+              return first.message.content;
+          }
+        }
+        throw new Error(
+          "ChatOllama model does not expose call/generate/invoke methods"
+        );
+      }
+
+      if (typeof resp === "string") return resp;
+      if (resp && typeof resp.content === "string") return resp.content;
+      if (resp && Array.isArray(resp.content)) {
+        const parts = resp.content
+          .map((p) => {
+            if (typeof p === "string") return p;
+            if (!p) return "";
+            if (p.text) return p.text;
+            if (p.type === "text" && p.content) return p.content;
+            return "";
+          })
+          .filter(Boolean);
+        if (parts.length) return parts.join("\n");
+      }
+
+      console.warn(
+        "[llmAdapter] ChatOllama returned non-standard response; stringifying"
+      );
+      return String(resp ?? "");
+    } catch (lcErr) {
+      console.warn(
+        "[llmAdapter] LangChain ChatOllama failed, falling back to native HTTP:",
+        lcErr && lcErr.message ? lcErr.message : lcErr
+      );
+    }
+
+    console.log("[llmAdapter] Using native Ollama HTTP API for local provider");
+    try {
+      let fetchFn = global.fetch;
+      if (!fetchFn) {
+        const nf = await import("node-fetch");
+        fetchFn = nf.default;
+      }
+
+      const baseUrl =
+        provider.info.baseUrl || "http://localhost:11434";
+      const endpoint = `${baseUrl.replace(/\/+$/, "")}/api/chat`;
+
+      // Ensure messages array shape is correct for Ollama:
+      // Ollama accepts { role, content } like OpenAI.
+      const formattedMessages = Array.isArray(messages)
+        ? messages.map((m) => ({
+            role: m.role || "user",
+            content: m.content || "",
+          }))
+        : [{ role: "user", content: String(messages) }];
+
+      const payload = {
+        model:
+          model ||
+          (provider.info && provider.info.model) ||
+          "llama3.1",
+        messages: formattedMessages,
+        stream: false,
+        options: {
+          temperature,
+        },
+      };
+
+      console.log("[llmAdapter] Sending Ollama request to:", endpoint, {
+        model: payload.model,
+        temperature,
+        messagesCount: payload.messages.length,
+      });
+      console.log("[llmAdapter] Payload:", JSON.stringify(payload, null, 2));
+
+      // Add a simple timeout so we don't hang forever if the server gets stuck
+      const controller = new AbortController();
+      const timeoutMs =
+        typeof opts.timeoutMs === "number" ? opts.timeoutMs : 120000;
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const resp = await fetchFn(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(
+            `Ollama HTTP error: ${resp.status} ${txt}`
+          );
+        }
+
+        const j = await resp.json();
+
+        // Typical Ollama response shape:
+        // { message: { role, content }, ... }
+        const msg = j && j.message;
+        let text = "";
+        if (msg && typeof msg.content === "string") {
+          text = msg.content;
+        } else if (msg && Array.isArray(msg.content)) {
+          text = msg.content
+            .map((p) =>
+              typeof p === "string"
+                ? p
+                : p && p.text
+                ? p.text
+                : ""
+            )
+            .filter(Boolean)
+            .join("");
+        }
+
+        if (!text || !text.trim()) {
+          console.warn(
+            "[llmAdapter] Ollama returned empty content. Full response:",
+            JSON.stringify(j, null, 2)
+          );
+        }
+
+        console.log("[llmAdapter] Ollama response:", text);
+
+        return text || "";
+      } catch (e) {
+        if (e.name === "AbortError") {
+          throw new Error(
+            `Ollama request timed out after ${timeoutMs} ms`
+          );
+        }
+        throw e;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } catch (e) {
+      console.warn(
+        "[llmAdapter] Native Ollama HTTP call failed, falling back to generic HTTP path:",
+        e && e.message ? e.message : e
+      );
+      // fall through to generic OpenAI/local HTTP handler below
+    }
+  }
+
   // -------- OpenAI via LangChain ChatOpenAI --------
   if (provider && provider.name === "openai") {
     try {
@@ -284,7 +512,7 @@ async function chat(messages, opts = {}) {
         "[llmAdapter] Full response:",
         JSON.stringify(resp, null, 2)
       );
-      
+
       // Return empty string or throw error instead of returning the object
       throw new Error(
         `Gemini returned empty response. Finish reason: ${finishReason}. Please increase max_tokens.`
@@ -360,7 +588,7 @@ async function chat(messages, opts = {}) {
           if (!resp.ok) {
             const txt = await resp.text();
             const error = new Error(`Google Generative API error: ${resp.status} ${txt}`);
-            
+
             // If 503 (overloaded) and we have retries left, continue loop
             if (resp.status === 503 && attempt < maxRetries) {
               lastError = error;
@@ -369,7 +597,7 @@ async function chat(messages, opts = {}) {
               await new Promise(resolve => setTimeout(resolve, waitTime));
               continue;
             }
-            
+
             throw error;
           }
 
@@ -383,12 +611,12 @@ async function chat(messages, opts = {}) {
           return content;
         } catch (attemptError) {
           lastError = attemptError;
-          
+
           // If this was the last attempt, throw the error
           if (attempt === maxRetries) {
             throw lastError;
           }
-          
+
           // Otherwise continue to next retry
           console.warn(`[llmAdapter] Attempt ${attempt} failed:`, attemptError.message);
         }
@@ -417,9 +645,9 @@ async function chat(messages, opts = {}) {
     // Ensure messages array shape is correct
     const formattedMessages = Array.isArray(messages)
       ? messages.map((m) => ({
-          role: m.role || "user",
-          content: m.content || "",
-        }))
+        role: m.role || "user",
+        content: m.content || "",
+      }))
       : [{ role: "user", content: String(messages) }];
 
     const maxTokens =

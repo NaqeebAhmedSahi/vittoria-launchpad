@@ -41,6 +41,8 @@ function AIConfigCard() {
   // Model now forced (read-only) to pro tier based on provider
   const [model, setModel] = useState("gpt-4o");
   const [activeModel, setActiveModel] = useState("");
+  const [baseUrl, setBaseUrl] = useState("http://localhost:11434/v1");
+  const [localModel, setLocalModel] = useState("llama3");
 
   useEffect(() => {
     (async () => {
@@ -66,6 +68,8 @@ function AIConfigCard() {
               setProvider(name);
               if (info && (info as any).key) setApiKey((info as any).key);
               if (info && (info as any).model) setModel((info as any).model);
+              if (info && (info as any).baseUrl) setBaseUrl((info as any).baseUrl);
+              if (name === 'local' && (info as any).model) setLocalModel((info as any).model);
             }
           } catch (e) {
             console.warn("Failed to parse llm_providers setting", e);
@@ -86,10 +90,24 @@ function AIConfigCard() {
 
   // When provider changes, force model to pro variant (OpenAI gpt-4o, Google gemini-2.5-pro)
   useEffect(() => {
-    const forced = provider === "google" ? "gemini-2.5-pro" : "gpt-4o";
+    let forced = "gpt-4o";
+    if (provider === "google") forced = "gemini-2.5-pro";
+    else if (provider === "local") forced = localModel || "llama3";
+
     setModel(forced);
     const info = providersMap && providersMap[provider];
-    if (info && info.key) setApiKey(info.key);
+    if (info) {
+      if (info.key) setApiKey(info.key);
+      if (info.baseUrl) setBaseUrl(info.baseUrl);
+      if (info.model && provider === "local") setLocalModel(info.model);
+    } else {
+      // Defaults for new provider selection
+      if (provider === "local") {
+        setBaseUrl("http://localhost:11434/v1");
+        setLocalModel("llama3");
+        setApiKey(""); // Clear key for local as it might be empty
+      }
+    }
   }, [provider, providersMap]);
 
   const handleSave = async () => {
@@ -128,11 +146,12 @@ function AIConfigCard() {
       Object.keys(newMap).forEach((k) => {
         if (newMap[k]) newMap[k].isActive = false;
       });
-      const forcedModel = provider === "google" ? "gemini-2.5-pro" : "gpt-4o";
+      const forcedModel = provider === "google" ? "gemini-2.5-pro" : (provider === "local" ? localModel : "gpt-4o");
       newMap[provider] = {
         key: apiKey,
         isActive: true,
         model: forcedModel,
+        baseUrl: provider === "local" ? baseUrl : undefined,
         updated_at: new Date().toISOString(),
       };
       await persistProviders(newMap);
@@ -179,15 +198,20 @@ function AIConfigCard() {
   };
 
   const handleTest = async () => {
-    if (!apiKey)
+    if (!apiKey && provider !== "local")
       return toast({
         title: "No key",
         description: "Please enter an API key first",
         variant: "destructive",
       });
     try {
-      const resp = await fetch("https://api.openai.com/v1/models", {
-        headers: { Authorization: `Bearer ${apiKey}` },
+      let url = "https://api.openai.com/v1/models";
+      if (provider === "local" && baseUrl) {
+        url = `${baseUrl.replace(/\/+$/, "")}/models`;
+      }
+
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey || "dummy"}` },
       });
       if (!resp.ok) {
         const text = await resp.text();
@@ -221,28 +245,72 @@ function AIConfigCard() {
               <SelectContent>
                 <SelectItem value="openai">OpenAI</SelectItem>
                 <SelectItem value="google">Google</SelectItem>
+                <SelectItem value="local">Local (Ollama/OpenAI-compatible)</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label htmlFor="openai-key">Key</Label>
-            <div className="flex gap-2">
-              <Input
-                id="openai-key"
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-... or key"
-              />
-              <Button variant="ghost" onClick={() => setShowKey((s) => !s)}>
-                {showKey ? "Hide" : "Show"}
-              </Button>
-            </div>
-          </div>
-          <div>
-            <Label>Model (read-only)</Label>
-            <Input value={model} readOnly className="bg-muted/40" />
-          </div>
+
+          {provider === "local" ? (
+            <>
+              <div className="col-span-2 grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="base-url">Base URL</Label>
+                  <Input
+                    id="base-url"
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder="http://localhost:11434/v1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="local-model">Model Name</Label>
+                  <Input
+                    id="local-model"
+                    value={localModel}
+                    onChange={(e) => setLocalModel(e.target.value)}
+                    placeholder="llama3"
+                  />
+                </div>
+              </div>
+              <div className="col-span-3">
+                <Label htmlFor="openai-key">API Key (Optional for local)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="openai-key"
+                    type={showKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                  />
+                  <Button variant="ghost" onClick={() => setShowKey((s) => !s)}>
+                    {showKey ? "Hide" : "Show"}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <Label htmlFor="openai-key">Key</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="openai-key"
+                    type={showKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                  />
+                  <Button variant="ghost" onClick={() => setShowKey((s) => !s)}>
+                    {showKey ? "Hide" : "Show"}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label>Model (read-only)</Label>
+                <Input value={model} readOnly className="bg-muted/40" />
+              </div>
+            </>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
           Keys are stored locally in application settings. Only one provider can be connected at a
@@ -282,14 +350,13 @@ function AIConfigCard() {
                 <div className="font-medium capitalize">{name}</div>
                 <div className="text-sm text-muted-foreground">
                   {info.model
-                    ? `${info.model} · ${
-                        info.updated_at
-                          ? `Updated: ${new Date(info.updated_at).toLocaleString()}`
-                          : ""
-                      }`
+                    ? `${info.model} · ${info.updated_at
+                      ? `Updated: ${new Date(info.updated_at).toLocaleString()}`
+                      : ""
+                    }`
                     : info.updated_at
-                    ? `Updated: ${new Date(info.updated_at).toLocaleString()}`
-                    : ""}
+                      ? `Updated: ${new Date(info.updated_at).toLocaleString()}`
+                      : ""}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -346,7 +413,7 @@ export default function Settings() {
   const [scoringApiEndpoint, setScoringApiEndpoint] = useState("");
   const [scoringApiKey, setScoringApiKey] = useState("");
   const [isSavingScoring, setIsSavingScoring] = useState(false);
-  
+
   // Database connection state
   const [dbInfo, setDbInfo] = useState<{
     connected: boolean;
@@ -360,7 +427,7 @@ export default function Settings() {
   }>({ connected: false });
   const [isLoadingDb, setIsLoadingDb] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  
+
   // Health check state
   const [healthStatus, setHealthStatus] = useState<{
     overall: 'operational' | 'degraded' | 'outage';
@@ -377,7 +444,7 @@ export default function Settings() {
     components: []
   });
   const [isRefreshingHealth, setIsRefreshingHealth] = useState(false);
-  
+
   const { toast } = useToast();
 
   // Load CV storage path and scoring API settings on component mount
@@ -407,7 +474,7 @@ export default function Settings() {
       } finally {
         setIsLoadingDb(false);
       }
-      
+
       // Load CV storage path
       try {
         const path = await (window.api as any).settings.getCVStoragePath();
@@ -450,137 +517,137 @@ export default function Settings() {
         category: 'core' | 'feature' | 'migration';
         description?: string;
       }> = [
-        // Core Services
-        {
-          name: 'Database Connection',
-          status: isDatabaseUp ? 'operational' : 'outage',
-          category: 'core',
-          description: isDatabaseUp ? `PostgreSQL ${dbStatus.version || ''}` : 'Cannot connect to database'
-        },
-        {
-          name: 'Authentication Service',
-          status: isDatabaseUp ? 'operational' : 'degraded',
-          category: 'core',
-          description: 'User authentication and session management'
-        },
-        {
-          name: 'File Storage',
-          status: 'operational',
-          category: 'core',
-          description: 'Local file system storage for CVs and documents'
-        },
-        {
-          name: 'LLM Service',
-          status: 'operational',
-          category: 'core',
-          description: 'AI-powered CV parsing and analysis'
-        },
-        
-        // Feature Modules
-        {
-          name: 'CV Intake & Parsing',
-          status: 'operational',
-          category: 'feature',
-          description: 'Upload and parse CV documents'
-        },
-        {
-          name: 'Candidate Management',
-          status: 'operational',
-          category: 'feature',
-          description: 'Create, update, and manage candidate profiles'
-        },
-        {
-          name: 'Mandate Management',
-          status: 'operational',
-          category: 'feature',
-          description: 'Job mandate creation and tracking'
-        },
-        {
-          name: 'Firm Management',
-          status: 'operational',
-          category: 'feature',
-          description: 'Client firm database and management'
-        },
-        {
-          name: 'Quality Scoring',
-          status: 'operational',
-          category: 'feature',
-          description: 'CV quality assessment and scoring'
-        },
-        {
-          name: 'Match Scoring Engine',
-          status: 'degraded',
-          category: 'feature',
-          description: 'Candidate-mandate matching (migration in progress)'
-        },
-        {
-          name: 'Team Management',
-          status: 'maintenance',
-          category: 'feature',
-          description: 'Planned for future release'
-        },
-        {
-          name: 'Deal Tracking',
-          status: 'maintenance',
-          category: 'feature',
-          description: 'Planned for future release'
-        },
-        {
-          name: 'Finance & Invoicing',
-          status: 'maintenance',
-          category: 'feature',
-          description: 'Planned for future release'
-        },
-        
-        // Database Migration Status
-        {
-          name: 'Authentication Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Settings Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Candidate Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Firm Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Mandate Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Intake Model',
-          status: 'degraded',
-          category: 'migration',
-          description: 'Migration in progress - schema updated, functions being migrated'
-        },
-        {
-          name: 'Scoring Model',
-          status: 'degraded',
-          category: 'migration',
-          description: 'Migration pending'
-        }
-      ];
+          // Core Services
+          {
+            name: 'Database Connection',
+            status: isDatabaseUp ? 'operational' : 'outage',
+            category: 'core',
+            description: isDatabaseUp ? `PostgreSQL ${dbStatus.version || ''}` : 'Cannot connect to database'
+          },
+          {
+            name: 'Authentication Service',
+            status: isDatabaseUp ? 'operational' : 'degraded',
+            category: 'core',
+            description: 'User authentication and session management'
+          },
+          {
+            name: 'File Storage',
+            status: 'operational',
+            category: 'core',
+            description: 'Local file system storage for CVs and documents'
+          },
+          {
+            name: 'LLM Service',
+            status: 'operational',
+            category: 'core',
+            description: 'AI-powered CV parsing and analysis'
+          },
+
+          // Feature Modules
+          {
+            name: 'CV Intake & Parsing',
+            status: 'operational',
+            category: 'feature',
+            description: 'Upload and parse CV documents'
+          },
+          {
+            name: 'Candidate Management',
+            status: 'operational',
+            category: 'feature',
+            description: 'Create, update, and manage candidate profiles'
+          },
+          {
+            name: 'Mandate Management',
+            status: 'operational',
+            category: 'feature',
+            description: 'Job mandate creation and tracking'
+          },
+          {
+            name: 'Firm Management',
+            status: 'operational',
+            category: 'feature',
+            description: 'Client firm database and management'
+          },
+          {
+            name: 'Quality Scoring',
+            status: 'operational',
+            category: 'feature',
+            description: 'CV quality assessment and scoring'
+          },
+          {
+            name: 'Match Scoring Engine',
+            status: 'degraded',
+            category: 'feature',
+            description: 'Candidate-mandate matching (migration in progress)'
+          },
+          {
+            name: 'Team Management',
+            status: 'maintenance',
+            category: 'feature',
+            description: 'Planned for future release'
+          },
+          {
+            name: 'Deal Tracking',
+            status: 'maintenance',
+            category: 'feature',
+            description: 'Planned for future release'
+          },
+          {
+            name: 'Finance & Invoicing',
+            status: 'maintenance',
+            category: 'feature',
+            description: 'Planned for future release'
+          },
+
+          // Database Migration Status
+          {
+            name: 'Authentication Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Settings Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Candidate Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Firm Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Mandate Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Intake Model',
+            status: 'degraded',
+            category: 'migration',
+            description: 'Migration in progress - schema updated, functions being migrated'
+          },
+          {
+            name: 'Scoring Model',
+            status: 'degraded',
+            category: 'migration',
+            description: 'Migration pending'
+          }
+        ];
 
       // Determine overall status
       const hasOutage = components.some(c => c.status === 'outage');
       const hasDegraded = components.some(c => c.status === 'degraded');
-      
+
       setHealthStatus({
         overall: hasOutage ? 'outage' : hasDegraded ? 'degraded' : 'operational',
         lastChecked: new Date(),
@@ -664,7 +731,7 @@ export default function Settings() {
     if (!confirm("Are you sure you want to disconnect the database? You will need to reconfigure the connection.")) {
       return;
     }
-    
+
     setIsDisconnecting(true);
     try {
       const result = await (window.api as any).setup.disconnect();
@@ -674,7 +741,7 @@ export default function Settings() {
           description: "Database disconnected successfully. Reloading application...",
         });
         setDbInfo({ connected: false });
-        
+
         // Reload the application to trigger setup check
         setTimeout(() => {
           window.location.reload();
@@ -721,11 +788,11 @@ export default function Settings() {
         <TabsContent value="health" className="space-y-6">
           {/* Overall Status Banner */}
           <Card className={
-            healthStatus.overall === 'operational' 
-              ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
+            healthStatus.overall === 'operational'
+              ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20'
               : healthStatus.overall === 'degraded'
-              ? 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/20'
-              : 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20'
+                ? 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/20'
+                : 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20'
           }>
             <CardContent className="pt-6">
               <div className="flex items-start justify-between">
@@ -1005,7 +1072,7 @@ export default function Settings() {
                     <Input id="db-user" value={dbInfo.username || ""} readOnly className="bg-muted" />
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <Button 
+                    <Button
                       variant="destructive"
                       onClick={handleDisconnectDatabase}
                       disabled={isDisconnecting}

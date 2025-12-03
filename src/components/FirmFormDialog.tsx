@@ -70,12 +70,12 @@ interface FirmFormDialogProps {
 }
 
 export function FirmFormDialog({
-                                 open,
-                                 onOpenChange,
-                                 mode,
-                                 initialData,
-                                 onSubmit,
-                               }: FirmFormDialogProps) {
+  open,
+  onOpenChange,
+  mode,
+  initialData,
+  onSubmit,
+}: FirmFormDialogProps) {
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
   const [sectorFocus, setSectorFocus] = useState<string[]>([]);
@@ -87,7 +87,6 @@ export function FirmFormDialog({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Populate form when editing
   useEffect(() => {
     if (open && mode === "edit" && initialData) {
       setName(initialData.name || "");
@@ -121,34 +120,29 @@ export function FirmFormDialog({
   const validate = () => {
     const nextErrors: Record<string, string> = {};
 
-    // Firm name: required + letters only
     if (!name.trim()) {
       nextErrors.name = "Firm name is required.";
     } else if (!isAlphabeticName(name)) {
       nextErrors.name = "Firm name must contain only letters and spaces.";
     }
 
-    // Short name: optional but if present, letters only
     if (shortName.trim() && !isAlphabeticName(shortName)) {
       nextErrors.short_name = "Short name must contain only letters and spaces.";
     }
 
-    // Website: optional but if present must be a valid URL
     if (website.trim() && !isValidUrl(website)) {
-      nextErrors.website = "Please enter a valid website URL (e.g. https://example.com).";
+      nextErrors.website =
+        "Please enter a valid website URL (e.g. https://example.com).";
     }
 
-    // Sector focus: required (at least one)
     if (sectorFocus.length === 0) {
       nextErrors.sector_focus = "Sector focus is required (add at least one sector).";
     }
 
-    // Asset classes: required
     if (assetClasses.length === 0) {
       nextErrors.asset_classes = "Asset classes are required (add at least one).";
     }
 
-    // Regions: required
     if (regions.length === 0) {
       nextErrors.regions = "Regions are required (add at least one).";
     }
@@ -196,11 +190,12 @@ export function FirmFormDialog({
         onOpenChange(value);
       }}
     >
-      <DialogContent className="max-w-2xl h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto pt-6 pb-6">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           {/* Row 1: Name + Short Name */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -242,16 +237,10 @@ export function FirmFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="Bulge Bracket">
-                    Bulge Bracket
-                  </SelectItem>
+                  <SelectItem value="Bulge Bracket">Bulge Bracket</SelectItem>
                   <SelectItem value="Boutique">Boutique</SelectItem>
-                  <SelectItem value="Asset Manager">
-                    Asset Manager
-                  </SelectItem>
-                  <SelectItem value="Private Equity">
-                    Private Equity
-                  </SelectItem>
+                  <SelectItem value="Asset Manager">Asset Manager</SelectItem>
+                  <SelectItem value="Private Equity">Private Equity</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -269,7 +258,6 @@ export function FirmFormDialog({
             </div>
           </div>
 
-          {/* Row 3: Sector / Asset classes */}
           <TagInputField
             id="sector_focus"
             label="Sector Focus"
@@ -290,7 +278,6 @@ export function FirmFormDialog({
             error={errors.asset_classes}
           />
 
-          {/* Row 4: Regions */}
           <TagInputField
             id="regions"
             label="Regions"
@@ -301,7 +288,6 @@ export function FirmFormDialog({
             error={errors.regions}
           />
 
-          {/* Row 5: Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes_text">Notes</Label>
             <Textarea
@@ -313,7 +299,7 @@ export function FirmFormDialog({
             />
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="outline"

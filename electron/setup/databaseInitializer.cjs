@@ -166,6 +166,163 @@ async function createDatabase({ host = 'localhost', port = 5432, username, passw
 }
 
 /**
+ * Add pgvector embedding columns to all tables
+ */
+async function addPgvectorEmbeddings(client) {
+  console.log('[databaseInitializer] Adding pgvector embedding columns to all tables...');
+
+  // Add embedding columns to intake_files
+  console.log('[databaseInitializer] Adding embeddings to intake_files...');
+  await client.query(`
+    ALTER TABLE intake_files
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'parsed_text',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to candidates
+  console.log('[databaseInitializer] Adding embeddings to candidates...');
+  await client.query(`
+    ALTER TABLE candidates
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'parsed',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true,
+    ADD COLUMN IF NOT EXISTS profile_summary_for_embedding text;
+  `);
+
+  // Add embedding columns to mandates
+  console.log('[databaseInitializer] Adding embeddings to mandates...');
+  await client.query(`
+    ALTER TABLE mandates
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'mandate',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to firms
+  console.log('[databaseInitializer] Adding embeddings to firms...');
+  await client.query(`
+    ALTER TABLE firms
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'firm_profile',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to sources
+  console.log('[databaseInitializer] Adding embeddings to sources...');
+  await client.query(`
+    ALTER TABLE sources
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'source_profile',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to finance_transactions
+  console.log('[databaseInitializer] Adding embeddings to finance_transactions...');
+  await client.query(`
+    ALTER TABLE finance_transactions
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'transaction',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to people
+  console.log('[databaseInitializer] Adding embeddings to people...');
+  await client.query(`
+    ALTER TABLE people
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'person_profile',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to employments
+  console.log('[databaseInitializer] Adding embeddings to employments...');
+  await client.query(`
+    ALTER TABLE employments
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'employment',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to documents
+  console.log('[databaseInitializer] Adding embeddings to documents...');
+  await client.query(`
+    ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'document',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to audit_log
+  console.log('[databaseInitializer] Adding embeddings to audit_log...');
+  await client.query(`
+    ALTER TABLE audit_log
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'audit',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to match_scores
+  console.log('[databaseInitializer] Adding embeddings to match_scores...');
+  await client.query(`
+    ALTER TABLE match_scores
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'match',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to teams
+  console.log('[databaseInitializer] Adding embeddings to teams...');
+  await client.query(`
+    ALTER TABLE teams
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'team',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Create ivfflat indexes for semantic search
+  console.log('[databaseInitializer] Creating ivfflat indexes for semantic search...');
+  await client.query(`CREATE INDEX IF NOT EXISTS intake_files_embedding_idx ON intake_files USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS candidates_embedding_idx ON candidates USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS mandates_embedding_idx ON mandates USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS firms_embedding_idx ON firms USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS sources_embedding_idx ON sources USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS finance_transactions_embedding_idx ON finance_transactions USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS people_embedding_idx ON people USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS employments_embedding_idx ON employments USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS documents_embedding_idx ON documents USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS audit_log_embedding_idx ON audit_log USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS match_scores_embedding_idx ON match_scores USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS teams_embedding_idx ON teams USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+
+  console.log('[databaseInitializer] ✓ All pgvector embeddings and indexes created successfully');
+}
+
+/**
  * Initialize database schema (tables, indexes, etc.)
  */
 async function initializeSchema({ host = 'localhost', port = 5432, username, password, dbName = 'vittoria_launchpad' }) {
@@ -189,7 +346,7 @@ async function initializeSchema({ host = 'localhost', port = 5432, username, pas
     // Read schema file
     const schemaPath = path.join(__dirname, 'schema.sql');
     let schema;
-    
+
     if (fs.existsSync(schemaPath)) {
       schema = fs.readFileSync(schemaPath, 'utf-8');
       console.log('[databaseInitializer] Loaded schema from schema.sql');
@@ -203,18 +360,17 @@ async function initializeSchema({ host = 'localhost', port = 5432, username, pas
     await client.query(schema);
     console.log('[databaseInitializer] ✓ Schema initialized successfully');
 
-    // Run migrations to add any missing columns
-    await runMigrations(client);
+    // Add pgvector embeddings to all tables
+    await addPgvectorEmbeddings(client);
 
     // Insert default settings
     await insertDefaultSettings(client);
-    
+
     // Create default admin user
     await createDefaultAdminUser(client);
-    
+
     await client.end();
     return { success: true, message: 'Schema initialized successfully' };
-
   } catch (error) {
     console.error('[databaseInitializer] Error initializing schema:', error.message);
     try {
@@ -225,14 +381,11 @@ async function initializeSchema({ host = 'localhost', port = 5432, username, pas
     return {
       success: false,
       error: error.message,
-      message: 'Failed to initialize schema'
+      message: 'Failed to initialize schema',
     };
   }
 }
 
-/**
- * Run migrations to add missing columns to existing tables
- */
 /**
  * Insert default application settings
  */

@@ -213,5 +213,73 @@ contextBridge.exposeInMainWorld("api", {
     getUserActivity: (userId, filters) => ipcRenderer.invoke("audit:getUserActivity", { userId, filters }),
     getRecentActivity: (limit) => ipcRenderer.invoke("audit:getRecentActivity", limit),
     deleteOldLogs: (beforeDate) => ipcRenderer.invoke("audit:deleteOldLogs", beforeDate),
+  },
+  // Operations Module
+  emails: {
+    getByMailbox: (mailbox) => ipcRenderer.invoke("emails:getByMailbox", mailbox),
+    create: (emailData) => ipcRenderer.invoke("emails:create", emailData),
+    updateStatus: (id, status) => ipcRenderer.invoke("emails:updateStatus", { id, status }),
+    delete: (id) => ipcRenderer.invoke("emails:delete", id),
+    getUnreadCount: (mailbox) => ipcRenderer.invoke("emails:getUnreadCount", mailbox),
+    search: (query) => ipcRenderer.invoke("emails:search", query),
+  },
+  calendar: {
+    getAll: () => ipcRenderer.invoke("calendar:getAll"),
+    getByDateRange: (startDate, endDate) => ipcRenderer.invoke("calendar:getByDateRange", { startDate, endDate }),
+    create: (eventData) => ipcRenderer.invoke("calendar:create", eventData),
+    update: (id, eventData) => ipcRenderer.invoke("calendar:update", { id, eventData }),
+    delete: (id) => ipcRenderer.invoke("calendar:delete", id),
+    getById: (id) => ipcRenderer.invoke("calendar:getById", id),
+  },
+  intakeFolders: {
+    // Controller channels:
+    // getAll -> returns { success: true, folders }
+    getAllFolders: () => ipcRenderer.invoke("intakeFolders:getAll"),
+    getById: (id) => ipcRenderer.invoke("intakeFolders:getById", id),
+    createFolder: (folderData) => ipcRenderer.invoke("intakeFolders:create", folderData),
+    deleteFolder: (id) => ipcRenderer.invoke("intakeFolders:delete", id),
+    // documents
+    getDocumentsByFolder: (folderId) => ipcRenderer.invoke("intakeFolders:getDocuments", folderId),
+    getDocumentById: (id) => ipcRenderer.invoke("intakeFolders:getDocumentById", id),
+    createDocument: (documentData) => ipcRenderer.invoke("intakeFolders:createDocument", documentData),
+    uploadFiles: (folderId) => ipcRenderer.invoke("intakeFolders:uploadFiles", { folderId }),
+    uploadFolder: (folderId) => ipcRenderer.invoke("intakeFolders:uploadFolder", { folderId }),
+    // Async uploads with progress events
+    uploadFilesAsync: (folderId) => ipcRenderer.invoke("intakeFolders:uploadFilesAsync", { folderId }),
+    uploadFolderAsync: (folderId) => ipcRenderer.invoke("intakeFolders:uploadFolderAsync", { folderId }),
+  uploadPathsAsync: (folderId, paths) => ipcRenderer.invoke("intakeFolders:uploadPathsAsync", { folderId, paths }),
+    onUploadProgress: (cb) => {
+      const listener = (event, data) => cb(data);
+      ipcRenderer.on('intakeFolders:uploadProgress', listener);
+      return () => ipcRenderer.removeListener('intakeFolders:uploadProgress', listener);
+    },
+    onUploadComplete: (cb) => {
+      const listener = (event, data) => cb(data);
+      ipcRenderer.on('intakeFolders:uploadComplete', listener);
+      return () => ipcRenderer.removeListener('intakeFolders:uploadComplete', listener);
+    },
+    updateDocumentStatus: (id, status) => ipcRenderer.invoke("intakeFolders:updateDocumentStatus", { id, status }),
+    deleteDocument: (id) => ipcRenderer.invoke("intakeFolders:deleteDocument", id),
+    getAllDocuments: () => ipcRenderer.invoke("intakeFolders:getAllDocuments"),
+  },
+  contacts: {
+    getAll: (searchTerm) => ipcRenderer.invoke("contacts:getAll", searchTerm),
+    getById: (id) => ipcRenderer.invoke("contacts:getById", id),
+    create: (contactData) => ipcRenderer.invoke("contacts:create", contactData),
+    update: (id, contactData) => ipcRenderer.invoke("contacts:update", id, contactData),
+    delete: (id) => ipcRenderer.invoke("contacts:delete", id),
+    getByCategory: (category) => ipcRenderer.invoke("contacts:getByCategory", category),
+    getByCompany: (companyName) => ipcRenderer.invoke("contacts:getByCompany", companyName),
+    search: (searchTerm) => ipcRenderer.invoke("contacts:search", searchTerm),
+    bulkImport: (contacts) => ipcRenderer.invoke("contacts:bulkImport", contacts),
+  },
+  operationsSettings: {
+    getAllMailboxes: () => ipcRenderer.invoke("operationsSettings:getAllMailboxes"),
+    updateMailboxAccess: (email, access) => ipcRenderer.invoke("operationsSettings:updateMailboxAccess", { email, access }),
+    getAllIntegrations: () => ipcRenderer.invoke("operationsSettings:getAllIntegrations"),
+    updateIntegrationStatus: (name, status) => ipcRenderer.invoke("operationsSettings:updateIntegrationStatus", { name, status }),
+    // Controller uses getPreferences / updatePreferences
+    getUserPreferences: () => ipcRenderer.invoke("operationsSettings:getPreferences"),
+    updateUserPreferences: (preferences) => ipcRenderer.invoke("operationsSettings:updatePreferences", preferences),
   }
 });

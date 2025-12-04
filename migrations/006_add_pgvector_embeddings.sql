@@ -145,7 +145,37 @@ ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
 ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
 
 -- ============================================================================
--- STEP 16: Create ivfflat indexes for semantic search
+-- STEP 15: Add embedding columns to contacts
+-- ============================================================================
+ALTER TABLE contacts
+ADD COLUMN IF NOT EXISTS embedding vector(384),
+ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'contact_profile',
+ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+
+-- ============================================================================
+-- STEP 16: Add embedding columns to emails
+-- ============================================================================
+ALTER TABLE emails
+ADD COLUMN IF NOT EXISTS embedding vector(384),
+ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'email_content',
+ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+
+-- ============================================================================
+-- STEP 17: Add embedding columns to calendar_events
+-- ============================================================================
+ALTER TABLE calendar_events
+ADD COLUMN IF NOT EXISTS embedding vector(384),
+ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'event_details',
+ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+
+-- ============================================================================
+-- STEP 18: Create ivfflat indexes for semantic search
 -- ============================================================================
 CREATE INDEX IF NOT EXISTS intake_files_embedding_idx ON intake_files USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 CREATE INDEX IF NOT EXISTS candidates_embedding_idx ON candidates USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
@@ -161,9 +191,12 @@ CREATE INDEX IF NOT EXISTS mandate_outcomes_embedding_idx ON mandate_outcomes US
 CREATE INDEX IF NOT EXISTS match_scores_embedding_idx ON match_scores USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
 CREATE INDEX IF NOT EXISTS recommendation_events_embedding_idx ON recommendation_events USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
 CREATE INDEX IF NOT EXISTS teams_embedding_idx ON teams USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+CREATE INDEX IF NOT EXISTS contacts_embedding_idx ON contacts USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+CREATE INDEX IF NOT EXISTS emails_embedding_idx ON emails USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS calendar_events_embedding_idx ON calendar_events USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
 
 -- ============================================================================
--- STEP 16: Add comments for documentation
+-- STEP 19: Add comments for documentation
 -- ============================================================================
 COMMENT ON COLUMN intake_files.embedding IS 'Embedding vector for full CV text (384-dim for all-MiniLM-L6-v2)';
 COMMENT ON COLUMN intake_files.embedding_model IS 'Embedding model used to generate the vector';
@@ -175,3 +208,21 @@ COMMENT ON COLUMN candidates.embedding IS 'Embedding vector for candidate profil
 COMMENT ON COLUMN candidates.embedding_model IS 'Embedding model used';
 COMMENT ON COLUMN candidates.embedding_source IS 'Source: parsed, enriched, or manual';
 COMMENT ON COLUMN candidates.profile_summary_for_embedding IS 'Concatenated text used to generate embedding (for audit and re-computation)';
+
+COMMENT ON COLUMN contacts.embedding IS 'Embedding vector for contact profile (name, company, role, notes)';
+COMMENT ON COLUMN contacts.embedding_model IS 'Embedding model used to generate the vector';
+COMMENT ON COLUMN contacts.embedding_source IS 'Source: contact_profile';
+COMMENT ON COLUMN contacts.embedding_computed_at IS 'Timestamp when embedding was generated';
+COMMENT ON COLUMN contacts.embedding_normalized IS 'Whether vector is L2-normalized';
+
+COMMENT ON COLUMN emails.embedding IS 'Embedding vector for email subject and body content';
+COMMENT ON COLUMN emails.embedding_model IS 'Embedding model used to generate the vector';
+COMMENT ON COLUMN emails.embedding_source IS 'Source: email_content';
+COMMENT ON COLUMN emails.embedding_computed_at IS 'Timestamp when embedding was generated';
+COMMENT ON COLUMN emails.embedding_normalized IS 'Whether vector is L2-normalized';
+
+COMMENT ON COLUMN calendar_events.embedding IS 'Embedding vector for calendar event details (title, description, attendees)';
+COMMENT ON COLUMN calendar_events.embedding_model IS 'Embedding model used to generate the vector';
+COMMENT ON COLUMN calendar_events.embedding_source IS 'Source: event_details';
+COMMENT ON COLUMN calendar_events.embedding_computed_at IS 'Timestamp when embedding was generated';
+COMMENT ON COLUMN calendar_events.embedding_normalized IS 'Whether vector is L2-normalized';

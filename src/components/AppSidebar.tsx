@@ -27,6 +27,10 @@ import {
   GitBranch,
   Database,
   CheckCircle,
+  Mail,
+  Contact,
+  FolderTree,
+  Briefcase as OperationsIcon,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useState } from "react";
@@ -34,6 +38,18 @@ import { useLocation } from "react-router-dom";
 
 const navItems = [
   { name: "Dashboard", path: "/", icon: LayoutDashboard },
+    {
+    name: "Operations",
+    path: "/operations",
+    icon: OperationsIcon,
+    submenu: [
+      { name: "Email Management", path: "/operations/email", icon: Mail },
+      { name: "Calendar", path: "/operations/calendar", icon: Calendar },
+      { name: "Contacts", path: "/operations/contacts", icon: Contact },
+      { name: "Intake Folders", path: "/operations/intake-folders", icon: FolderTree },
+      { name: "Settings", path: "/operations/settings", icon: Settings },
+    ]
+  },
   { name: "Intake", path: "/intake", icon: Upload },
   { name: "Approvals", path: "/approvals", icon: CheckCircle },
   { name: "Candidates", path: "/candidates", icon: Users },
@@ -98,13 +114,14 @@ const navItems = [
       { name: "Firm Archetypes", path: "/edge/firm-archetypes", icon: Building2 },
     ]
   },
+
   // { name: "Audit Log", path: "/audit", icon: Shield },
   { name: "Settings", path: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
-  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control", "/intelligence", "/admin/sources"]);
+  const [expandedItems, setExpandedItems] = useState<string[]>(["/finance", "/edge-control", "/intelligence", "/admin/sources", "/operations"]);
   const [collapsed, setCollapsed] = useState(false);
 
   const toggleExpand = (path: string) => {

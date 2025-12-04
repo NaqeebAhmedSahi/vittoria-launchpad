@@ -10,9 +10,10 @@ async function getActiveProvider() {
       const map = typeof raw === "string" ? JSON.parse(raw) : raw;
       for (const [name, info] of Object.entries(map || {})) {
         // Prefer active providers that have a configured key. If an active provider
-        // exists but has no key, ignore it and fall back to other keys (e.g., openai_api_key).
-        if (info && info.isActive && info.key)
-          return { name, key: info.key, info };
+        // exists but has no key, ignore it and fall back to other keys (e.g., openai_api_key),
+        // UNLESS it is a local provider which might not need a key.
+        if (info && info.isActive && (info.key || name === 'local' || name === 'llmstudio'))
+          return { name, key: info.key || 'dummy', info };
       }
     }
   } catch (e) {
@@ -221,9 +222,9 @@ async function chat(messages, opts = {}) {
       // Ollama accepts { role, content } like OpenAI.
       const formattedMessages = Array.isArray(messages)
         ? messages.map((m) => ({
-            role: m.role || "user",
-            content: m.content || "",
-          }))
+          role: m.role || "user",
+          content: m.content || "",
+        }))
         : [{ role: "user", content: String(messages) }];
 
       const payload = {
@@ -284,8 +285,8 @@ async function chat(messages, opts = {}) {
               typeof p === "string"
                 ? p
                 : p && p.text
-                ? p.text
-                : ""
+                  ? p.text
+                  : ""
             )
             .filter(Boolean)
             .join("");
@@ -630,6 +631,83 @@ async function chat(messages, opts = {}) {
     }
   }
 
+  // -------- LLM Studio (LM Studio) provider --------
+  if (provider && provider.name === "llmstudio") {
+    const baseUrl = (provider.info && provider.info.baseUrl) || "http://localhost:1234/v1";
+    const modelName = model || (provider.info && provider.info.model) || "local-model";
+
+    console.log("[llmAdapter] Using LLM Studio with:", { baseUrl, model: modelName });
+
+    // Try LangChain ChatOpenAI first (compatible API)
+    try {
+      const mod = await import("@langchain/openai");
+      const { ChatOpenAI } = mod;
+
+      if (ChatOpenAI) {
+        const chatModel = new ChatOpenAI({
+          openAIApiKey: "lm-studio", // Dummy key required
+          configuration: {
+            baseURL: baseUrl,
+          },
+          modelName: modelName,
+          temperature,
+        });
+
+        const { HumanMessage, SystemMessage } = await import("@langchain/core/messages");
+        const langchainMessages = messages.map((m) => {
+          if (m.role === "system") return new SystemMessage(m.content);
+          return new HumanMessage(m.content);
+        });
+
+        const resp = await chatModel.invoke(langchainMessages);
+        if (typeof resp === "string") return resp;
+        if (resp && resp.content) return resp.content;
+        return String(resp);
+      }
+    } catch (e) {
+      console.warn("[llmAdapter] LangChain for LLM Studio failed, falling back to HTTP:", e);
+    }
+
+    // Fallback to native HTTP
+    try {
+      let fetchFn = global.fetch;
+      if (!fetchFn) {
+        const nf = await import("node-fetch");
+        fetchFn = nf.default;
+      }
+
+      const formattedMessages = Array.isArray(messages)
+        ? messages.map((m) => ({
+          role: m.role || "user",
+          content: m.content || "",
+        }))
+        : [{ role: "user", content: String(messages) }];
+
+      const payload = {
+        model: modelName,
+        messages: formattedMessages,
+        temperature,
+        stream: false,
+      };
+
+      const resp = await fetchFn(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`LLM Studio HTTP error: ${resp.status} ${txt}`);
+      }
+
+      const j = await resp.json();
+      return j?.choices?.[0]?.message?.content || "";
+    } catch (e) {
+      throw e;
+    }
+  }
+
   // -------- Fallback: OpenAI via HTTP (provider missing or not google) --------
   try {
     const activeKey =
@@ -686,4 +764,130 @@ async function chat(messages, opts = {}) {
   }
 }
 
-module.exports = { getActiveProvider, chat };
+/**
+ * Ensure the specified model is loaded/available for the provider.
+ * For Ollama: calls /api/pull (stream: false) to ensure model exists.
+ * For LLM Studio: checks /v1/models to see if it's listed.
+ */
+async function ensureModelLoaded(providerName, modelName, baseUrl) {
+  if (!modelName) return { success: true }; // nothing to load
+
+  let fetchFn = global.fetch;
+  if (!fetchFn) {
+    const nf = await import("node-fetch");
+    fetchFn = nf.default;
+  }
+
+  if (providerName === 'local') {
+    // Ollama
+    const url = (baseUrl || "http://localhost:11434").replace(/\/+$/, "");
+    console.log(`[llmAdapter] Ensuring Ollama model '${modelName}' is available at ${url}...`);
+
+    try {
+      // Use /api/pull to ensure model is available (will pull if missing, or return immediately if present)
+      // stream: false means we wait for it to finish
+      const resp = await fetchFn(`${url}/api/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName, stream: false })
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`Ollama pull failed: ${resp.status} ${txt}`);
+      }
+
+      console.log(`[llmAdapter] Ollama model '${modelName}' is ready.`);
+      return { success: true };
+    } catch (e) {
+      console.error(`[llmAdapter] Failed to ensure Ollama model:`, e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  if (providerName === 'llmstudio') {
+    // LLM Studio - Use SDK for proper model management
+    console.log(`[llmAdapter] Checking/loading LLM Studio model '${modelName}'...`);
+
+    try {
+      // Import the LM Studio SDK (ESM module, so we use dynamic import)
+      const { LMStudioClient } = await import("@lmstudio/sdk");
+      
+      // Initialize the client (connects to LM Studio on default port)
+      const client = new LMStudioClient();
+      
+      // First, check what models are currently loaded
+      const loadedModels = await client.llm.listLoaded();
+      console.log(`[llmAdapter] Currently loaded models in LLM Studio:`, 
+        loadedModels.map(m => m.identifier || m.path || 'unknown'));
+      
+      // Check if requested model is already loaded
+      const isAlreadyLoaded = loadedModels.some(m => {
+        const id = m.identifier || m.path || '';
+        return id === modelName || 
+               id.toLowerCase().includes(modelName.toLowerCase()) ||
+               modelName.toLowerCase().includes(id.toLowerCase());
+      });
+
+      if (isAlreadyLoaded) {
+        console.log(`[llmAdapter] LLM Studio model '${modelName}' is already loaded.`);
+        return { success: true };
+      }
+
+      // Unload all currently loaded models to free GPU memory
+      if (loadedModels.length > 0) {
+        console.log(`[llmAdapter] Unloading ${loadedModels.length} model(s) to free GPU memory...`);
+        for (const loadedModel of loadedModels) {
+          try {
+            const modelId = loadedModel.identifier || loadedModel.path || 'unknown';
+            console.log(`[llmAdapter] Unloading model: ${modelId}`);
+            await loadedModel.unload();
+            console.log(`[llmAdapter] Successfully unloaded: ${modelId}`);
+          } catch (unloadErr) {
+            console.warn(`[llmAdapter] Failed to unload model:`, unloadErr.message);
+            // Continue anyway - the load might still work
+          }
+        }
+      }
+
+      // Model not loaded - try to load it
+      console.log(`[llmAdapter] Loading model '${modelName}'...`);
+      
+      try {
+        // Load the model using the SDK
+        // This will load the model if it exists in LM Studio's model library
+        await client.llm.load(modelName, {
+          verbose: false,
+          onProgress: (progress) => {
+            if (progress.progress !== undefined) {
+              console.log(`[llmAdapter] Loading model: ${Math.round(progress.progress * 100)}%`);
+            }
+          }
+        });
+        
+        console.log(`[llmAdapter] Successfully loaded LLM Studio model '${modelName}'.`);
+        // Note: Don't return the model object - it's not serializable for Electron IPC
+        return { success: true };
+      } catch (loadErr) {
+        // If loading fails, the model might not be downloaded
+        console.warn(`[llmAdapter] Failed to load model '${modelName}':`, loadErr.message);
+        
+        // Provide helpful error message
+        const loadedNames = loadedModels.map(m => m.identifier || m.path || 'unknown').join(', ');
+        return { 
+          success: false, 
+          error: `Could not load model '${modelName}'. ${loadedModels.length > 0 
+            ? `Currently loaded: ${loadedNames}.` 
+            : 'No models loaded.'} Please ensure the model is downloaded in LM Studio.`
+        };
+      }
+    } catch (sdkErr) {
+      console.error(`[llmAdapter] LM Studio SDK failed:`, sdkErr.message);
+      return { success: false, error: `Cannot connect to LLM Studio: ${sdkErr.message}` };
+    }
+  }
+
+  return { success: true };
+}
+
+module.exports = { getActiveProvider, chat, ensureModelLoaded };

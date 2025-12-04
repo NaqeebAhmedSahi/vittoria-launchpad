@@ -31,6 +31,17 @@ import { FinancialIntelligenceEngine } from "@/services/financialIntelligenceEng
 import { sample13WeekCashflow, sampleBusinessLedgerSummary, sampleTaxDeadlines } from "@/data/sampleFinancials";
 import type { FinancialAlert, FinancialRecommendation } from "@/types/financial";
 
+// Helper function to get display name for provider
+function getProviderDisplayName(providerName: string): string {
+  const providerMap: Record<string, string> = {
+    "openai": "OpenAI",
+    "google": "Google",
+    "llmstudio": "Local (LLMStudio)",
+    "local": "Local (Ollama)",
+  };
+  return providerMap[providerName] || providerName;
+}
+
 function AIConfigCard() {
   const { toast } = useToast();
   const [apiKey, setApiKey] = useState("");
@@ -70,6 +81,7 @@ function AIConfigCard() {
               if (info && (info as any).model) setModel((info as any).model);
               if (info && (info as any).baseUrl) setBaseUrl((info as any).baseUrl);
               if (name === 'local' && (info as any).model) setLocalModel((info as any).model);
+              if (name === 'llmstudio' && (info as any).model) setLocalModel((info as any).model);
             }
           } catch (e) {
             console.warn("Failed to parse llm_providers setting", e);
@@ -92,20 +104,25 @@ function AIConfigCard() {
   useEffect(() => {
     let forced = "gpt-4o";
     if (provider === "google") forced = "gemini-2.5-pro";
-    else if (provider === "local") forced = localModel || "llama3";
+    else if (provider === "local") forced = localModel || "qwen2.5:7b";
+    else if (provider === "llmstudio") forced = localModel || "qwen2.5-7b-instruct";
 
     setModel(forced);
     const info = providersMap && providersMap[provider];
     if (info) {
       if (info.key) setApiKey(info.key);
       if (info.baseUrl) setBaseUrl(info.baseUrl);
-      if (info.model && provider === "local") setLocalModel(info.model);
+      if (info.model && (provider === "local" || provider === "llmstudio")) setLocalModel(info.model);
     } else {
       // Defaults for new provider selection
       if (provider === "local") {
-        setBaseUrl("http://localhost:11434/v1");
+        setBaseUrl("http://localhost:11434/");
         setLocalModel("llama3");
         setApiKey(""); // Clear key for local as it might be empty
+      } else if (provider === "llmstudio") {
+        setBaseUrl("http://localhost:1234/v1");
+        setLocalModel("qwen2.5-7b-instruct");
+        setApiKey("lm-studio"); // Dummy key usually needed
       }
     }
   }, [provider, providersMap]);
@@ -132,7 +149,7 @@ function AIConfigCard() {
   };
 
   const handleSaveProvider = async () => {
-    if (!apiKey)
+    if (!apiKey && provider !== "local" && provider !== "llmstudio")
       return toast({
         title: "No key",
         description: "Please enter an API key",
@@ -140,24 +157,42 @@ function AIConfigCard() {
       });
     setIsSaving(true);
     try {
+      // For local providers, ensure the model is loaded/available
+      if (provider === "local" || provider === "llmstudio") {
+        toast({
+          title: "Loading Model...",
+          description: `Checking availability of ${localModel}...`,
+        });
+
+        const result = await (window.api as any).llm.ensureModelLoaded(
+          provider,
+          localModel,
+          baseUrl
+        );
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load model");
+        }
+      }
+
       // Save provider key and mark it active (disconnect others)
       const newMap = { ...(providersMap || {}) };
       // store only the key and active flag; keep created_at for debugging
       Object.keys(newMap).forEach((k) => {
         if (newMap[k]) newMap[k].isActive = false;
       });
-      const forcedModel = provider === "google" ? "gemini-2.5-pro" : (provider === "local" ? localModel : "gpt-4o");
+      const forcedModel = provider === "google" ? "gemini-2.5-pro" : ((provider === "local" || provider === "llmstudio") ? localModel : "gpt-4o");
       newMap[provider] = {
         key: apiKey,
         isActive: true,
         model: forcedModel,
-        baseUrl: provider === "local" ? baseUrl : undefined,
+        baseUrl: (provider === "local" || provider === "llmstudio") ? baseUrl : undefined,
         updated_at: new Date().toISOString(),
       };
       await persistProviders(newMap);
       toast({
         title: "Saved",
-        description: `${provider} key saved and connected`,
+        description: `${provider} connected and model loaded`,
       });
       setModel(forcedModel);
       setActiveModel(forcedModel);
@@ -198,7 +233,7 @@ function AIConfigCard() {
   };
 
   const handleTest = async () => {
-    if (!apiKey && provider !== "local")
+    if (!apiKey && provider !== "local" && provider !== "llmstudio")
       return toast({
         title: "No key",
         description: "Please enter an API key first",
@@ -206,7 +241,7 @@ function AIConfigCard() {
       });
     try {
       let url = "https://api.openai.com/v1/models";
-      if (provider === "local" && baseUrl) {
+      if ((provider === "local" || provider === "llmstudio") && baseUrl) {
         url = `${baseUrl.replace(/\/+$/, "")}/models`;
       }
 
@@ -245,12 +280,13 @@ function AIConfigCard() {
               <SelectContent>
                 <SelectItem value="openai">OpenAI</SelectItem>
                 <SelectItem value="google">Google</SelectItem>
-                <SelectItem value="local">Local (Ollama/OpenAI-compatible)</SelectItem>
+                <SelectItem value="llmstudio">Local (LLMStudio)</SelectItem>
+                <SelectItem value="local">Local (Ollama)</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {provider === "local" ? (
+          {provider === "local" || provider === "llmstudio" ? (
             <>
               <div className="col-span-2 grid grid-cols-2 gap-2">
                 <div>
@@ -259,34 +295,36 @@ function AIConfigCard() {
                     id="base-url"
                     value={baseUrl}
                     onChange={(e) => setBaseUrl(e.target.value)}
-                    placeholder="http://localhost:11434/v1"
+                    placeholder={provider === "llmstudio" ? "http://localhost:1234/v1" : "http://localhost:11434/v1"}
                   />
                 </div>
                 <div>
                   <Label htmlFor="local-model">Model Name</Label>
-                  <Input
-                    id="local-model"
-                    value={localModel}
-                    onChange={(e) => setLocalModel(e.target.value)}
-                    placeholder="llama3"
-                  />
+                  <Select value={localModel} onValueChange={setLocalModel}>
+                    <SelectTrigger id="local-model">
+                      <SelectValue placeholder="Select a model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {provider === "local" ? (
+                        <>
+                          <SelectItem value="qwen2.5:7b">qwen2.5:7b</SelectItem>
+                          <SelectItem value="llama3.2">llama3.2</SelectItem>
+                          <SelectItem value="llama3.1">llama3.1</SelectItem>
+                          <SelectItem value="mistral">mistral</SelectItem>
+                          <SelectItem value="gemma2">gemma2</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="qwen2.5-7b-instruct">Qwen2.5-7B-Instruct</SelectItem>
+                          <SelectItem value="gpt-oss-120b">OpenAI GPT OSS 120B</SelectItem>
+                          <SelectItem value="openai/gpt-oss-20b">OpenAI GPT OSS 20B</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="col-span-3">
-                <Label htmlFor="openai-key">API Key (Optional for local)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="openai-key"
-                    type={showKey ? "text" : "password"}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                  />
-                  <Button variant="ghost" onClick={() => setShowKey((s) => !s)}>
-                    {showKey ? "Hide" : "Show"}
-                  </Button>
-                </div>
-              </div>
+              {/* API Key hidden for local providers */}
             </>
           ) : (
             <>
@@ -325,9 +363,11 @@ function AIConfigCard() {
         <Button onClick={handleSaveProvider} disabled={isSaving}>
           {isSaving ? "Saving..." : `Save & Connect ${provider}`}
         </Button>
-        <Button variant="outline" onClick={handleTest}>
-          Test Key
-        </Button>
+        {provider !== "local" && provider !== "llmstudio" && (
+          <Button variant="outline" onClick={handleTest}>
+            Test Key
+          </Button>
+        )}
       </div>
 
       <div className="mt-6 space-y-2">
@@ -347,7 +387,7 @@ function AIConfigCard() {
           {Object.entries(providersMap || {}).map(([name, info]) => (
             <div key={name} className="flex items-center justify-between p-3 border rounded-lg">
               <div>
-                <div className="font-medium capitalize">{name}</div>
+                <div className="font-medium">{getProviderDisplayName(name)}</div>
                 <div className="text-sm text-muted-foreground">
                   {info.model
                     ? `${info.model} · ${info.updated_at

@@ -110,6 +110,9 @@ export default function Mandates() {
   const [selectedMandate, setSelectedMandate] = useState<number | null>(null);
   const [matchScores, setMatchScores] = useState<any[]>([]); // kept for future scoring UI
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   // Candidate Match Modal
   const [matchModalOpen, setMatchModalOpen] = useState(false);
@@ -126,10 +129,10 @@ export default function Mandates() {
 
   const { toast } = useToast();
 
-  // Initial load
+  // Initial load + reload on pagination / status filter change
   useEffect(() => {
     loadData();
-  }, []);
+  }, [page, pageSize, statusFilter]);
 
   // Load scores when a mandate is selected
   useEffect(() => {
@@ -148,11 +151,16 @@ export default function Mandates() {
         setFirms(firmResult.firms);
       }
 
-      // 2) Mandates
-      const mandateResult = await window.api.mandate.list();
+      // 2) Mandates (paged)
+      const mandateResult = await window.api.mandate.listPaged({
+        page,
+        pageSize,
+        status: statusFilter === "all" ? undefined : statusFilter,
+      });
       if (mandateResult.success && mandateResult.mandates) {
         setMandates(mandateResult.mandates);
-        console.log("[Mandates] Loaded mandates:", mandateResult.mandates);
+        setTotal(mandateResult.total ?? 0);
+        console.log("[Mandates] Loaded mandates (paged):", mandateResult.mandates);
       } else {
         toast({
           title: "Error",
@@ -170,6 +178,19 @@ export default function Mandates() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextSize = parseInt(value, 10) || 10;
+    setPageSize(nextSize);
+    setPage(1);
   };
 
   const loadMatchScoresForMandate = async (mandateId: number) => {
@@ -328,10 +349,8 @@ export default function Mandates() {
         .toLowerCase()
         .includes(searchQuery.toLowerCase());
 
-    const matchesStatus =
-      statusFilter === "all" || mandate.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
+    // Status filtering is already handled on the backend via listPaged
+    return matchesSearch;
   });
 
   const selectedMandateData = mandates.find(
@@ -628,6 +647,69 @@ export default function Mandates() {
                     )}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+
+            {viewMode === "table" && (
+              <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Items per page</span>
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={handlePageSizeChange}
+                    >
+                      <SelectTrigger className="h-8 w-[80px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="text-xs">
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="30">30</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    {total > 0 ? (
+                      (() => {
+                        const start = (page - 1) * pageSize + 1;
+                        const end = Math.min(page * pageSize, total);
+                        return (
+                          <span>
+                            Showing {start}-{end} of {total} mandates
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span>Showing 0 mandates</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-xs"
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    {"<"}
+                  </Button>
+                  <div className="px-2 text-xs min-w-[56px] text-center">
+                    Page {page} of {isNaN(totalPages) ? 1 : totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-xs"
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages}
+                  >
+                    {">"}
+                  </Button>
+                </div>
               </div>
             )}
 

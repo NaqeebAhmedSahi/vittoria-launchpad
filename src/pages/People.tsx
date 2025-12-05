@@ -57,12 +57,15 @@ export default function People() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     loadFirms();
     loadTeams();
     loadPeople();
-  }, []);
+  }, [page, pageSize]);
 
   const loadFirms = async () => {
     try {
@@ -93,10 +96,13 @@ export default function People() {
       if (searchQuery) filters.search = searchQuery;
       if (selectedFirm !== 'all') filters.firm_id = parseInt(selectedFirm);
       if (selectedTeam !== 'all') filters.team_id = parseInt(selectedTeam);
+      filters.page = page;
+      filters.pageSize = pageSize;
 
-      const result = await window.api.people.list(filters);
+      const result = await window.api.people.listPaged(filters);
       if (result.success && result.people) {
         setPeople(result.people);
+        setTotal(result.total ?? 0);
       }
     } catch (error) {
       console.error('Failed to load people:', error);
@@ -107,10 +113,24 @@ export default function People() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      setPage(1);
       loadPeople();
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, selectedFirm, selectedTeam]);
+
+  const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextSize = parseInt(value, 10) || 10;
+    setPageSize(nextSize);
+    setPage(1);
+  };
 
   const handleCreatePerson = () => {
     setEditingPerson(null);
@@ -223,10 +243,17 @@ export default function People() {
                   placeholder="Search by name..."
                   className="pl-9"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                  }}
                 />
               </div>
-              <Select value={selectedFirm} onValueChange={setSelectedFirm}>
+              <Select
+                value={selectedFirm}
+                onValueChange={(value) => {
+                  setSelectedFirm(value);
+                }}
+              >
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="All Firms" />
                 </SelectTrigger>
@@ -239,7 +266,12 @@ export default function People() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+              <Select
+                value={selectedTeam}
+                onValueChange={(value) => {
+                  setSelectedTeam(value);
+                }}
+              >
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="All Teams" />
                 </SelectTrigger>
@@ -263,72 +295,135 @@ export default function People() {
               No people found. Create your first contact to get started.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Firm</TableHead>
-                  <TableHead>Team</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {people.map(person => (
-                  <TableRow
-                    key={person.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setSelectedPerson(person)}
-                  >
-                    <TableCell className="font-medium">
-                      {person.first_name} {person.last_name}
-                    </TableCell>
-                    <TableCell>{person.role || '—'}</TableCell>
-                    <TableCell>{getFirmName(person.firm_id)}</TableCell>
-                    <TableCell>{getTeamName(person.team_id)}</TableCell>
-                    <TableCell>
-                      {person.email ? (
-                        <a
-                          href={`mailto:${person.email}`}
-                          className="text-blue-600 hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {person.email}
-                        </a>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell>{person.phone || '—'}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditPerson(person);
-                        }}
-                      >
-                        <SquarePen className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeletePerson(person.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Firm</TableHead>
+                    <TableHead>Team</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {people.map(person => (
+                    <TableRow
+                      key={person.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => setSelectedPerson(person)}
+                    >
+                      <TableCell className="font-medium">
+                        {person.first_name} {person.last_name}
+                      </TableCell>
+                      <TableCell>{person.role || '—'}</TableCell>
+                      <TableCell>{getFirmName(person.firm_id)}</TableCell>
+                      <TableCell>{getTeamName(person.team_id)}</TableCell>
+                      <TableCell>
+                        {person.email ? (
+                          <a
+                            href={`mailto:${person.email}`}
+                            className="text-blue-600 hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {person.email}
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
+                      <TableCell>{person.phone || '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditPerson(person);
+                          }}
+                        >
+                          <SquarePen className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeletePerson(person.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Items per page</span>
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={handlePageSizeChange}
+                    >
+                      <SelectTrigger className="h-8 w-[80px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="text-xs">
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="30">30</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    {total > 0 ? (
+                      (() => {
+                        const start = (page - 1) * pageSize + 1;
+                        const end = Math.min(page * pageSize, total);
+                        return (
+                          <span>
+                            Showing {start}-{end} of {total} people
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span>Showing 0 people</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-xs"
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    {"<"}
+                  </Button>
+                  <div className="px-2 text-xs min-w-[56px] text-center">
+                    Page {page} of {isNaN(totalPages) ? 1 : totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-xs"
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages}
+                  >
+                    {">"}
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

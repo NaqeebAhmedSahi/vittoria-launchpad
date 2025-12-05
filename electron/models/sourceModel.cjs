@@ -9,6 +9,29 @@ const SourceModel = {
     return rows;
   },
   
+  async listPaged(filters = {}) {
+    const page = Number(filters.page) > 0 ? Number(filters.page) : 1;
+    const pageSize = Number(filters.pageSize) > 0 ? Number(filters.pageSize) : 10;
+
+    const offset = (page - 1) * pageSize;
+
+    const countResult = await db.query(
+      `SELECT COUNT(*)::int AS count FROM sources`,
+      []
+    );
+    const total = countResult.rows[0]?.count ?? 0;
+
+    const result = await db.query(
+      `SELECT * FROM sources ORDER BY name ASC LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return {
+      rows: result.rows,
+      total,
+    };
+  },
+  
   async getById(id) {
     const { rows } = await db.query('SELECT * FROM sources WHERE id = $1', [id]);
     return rows[0] || null;

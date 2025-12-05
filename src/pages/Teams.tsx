@@ -43,11 +43,14 @@ export default function Teams() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     loadFirms();
     loadTeams();
-  }, []);
+  }, [page, pageSize]);
 
   const loadFirms = async () => {
     try {
@@ -60,12 +63,22 @@ export default function Teams() {
     }
   };
 
-  const loadTeams = async (firmId?: number) => {
+  const loadTeams = async () => {
     setLoading(true);
     try {
-      const result = await window.api.team.list(firmId);
+      const filters: any = {
+        page,
+        pageSize,
+      };
+
+      if (selectedFirm !== 'all') {
+        filters.firm_id = parseInt(selectedFirm);
+      }
+
+      const result = await window.api.team.listPaged(filters);
       if (result.success && result.teams) {
         setTeams(result.teams);
+        setTotal(result.total ?? 0);
       }
     } catch (error) {
       console.error('Failed to load teams:', error);
@@ -76,11 +89,21 @@ export default function Teams() {
 
   const handleFirmChange = (value: string) => {
     setSelectedFirm(value);
-    if (value === 'all') {
-      loadTeams();
-    } else {
-      loadTeams(parseInt(value));
-    }
+    setPage(1);
+    loadTeams();
+  };
+
+  const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextSize = parseInt(value, 10) || 10;
+    setPageSize(nextSize);
+    setPage(1);
   };
 
   const handleCreateTeam = () => {
@@ -99,7 +122,7 @@ export default function Teams() {
     try {
       const result = await window.api.team.delete(teamId);
       if (result.success) {
-        loadTeams(selectedFirm === 'all' ? undefined : parseInt(selectedFirm));
+        loadTeams();
       } else {
         alert('Failed to delete team: ' + result.error);
       }
@@ -113,7 +136,7 @@ export default function Teams() {
     setIsDialogOpen(false);
     setEditingTeam(null);
     if (shouldRefresh) {
-      loadTeams(selectedFirm === 'all' ? undefined : parseInt(selectedFirm));
+      loadTeams();
     }
   };
 
@@ -192,58 +215,121 @@ export default function Teams() {
               No teams found. Create your first team to get started.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Team Name</TableHead>
-                  <TableHead>Firm</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {teams.map(team => (
-                  <TableRow
-                    key={team.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setSelectedTeam(team)}
-                  >
-                    <TableCell className="font-medium">{team.name}</TableCell>
-                    <TableCell>{getFirmName(team.firm_id)}</TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {team.description || '—'}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(team.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditTeam(team);
-                        }}
-                      >
-                        <SquarePen className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteTeam(team.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Team Name</TableHead>
+                    <TableHead>Firm</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {teams.map(team => (
+                    <TableRow
+                      key={team.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => setSelectedTeam(team)}
+                    >
+                      <TableCell className="font-medium">{team.name}</TableCell>
+                      <TableCell>{getFirmName(team.firm_id)}</TableCell>
+                      <TableCell className="max-w-xs truncate">
+                        {team.description || '—'}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(team.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditTeam(team);
+                          }}
+                        >
+                          <SquarePen className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteTeam(team.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Items per page</span>
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={handlePageSizeChange}
+                    >
+                      <SelectTrigger className="h-8 w-[80px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="text-xs">
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="30">30</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    {total > 0 ? (
+                      (() => {
+                        const start = (page - 1) * pageSize + 1;
+                        const end = Math.min(page * pageSize, total);
+                        return (
+                          <span>
+                            Showing {start}-{end} of {total} teams
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span>Showing 0 teams</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-xs"
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    {"<"}
+                  </Button>
+                  <div className="px-2 text-xs min-w-[56px] text-center">
+                    Page {page} of {isNaN(totalPages) ? 1 : totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-xs"
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages}
+                  >
+                    {">"}
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

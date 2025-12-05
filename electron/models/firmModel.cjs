@@ -202,6 +202,32 @@ async function listFirms() {
   return result.rows.map(parseFirmRow);
 }
 
+/**
+ * List firms with pagination (PostgreSQL)
+ */
+async function listFirmsPaged(options = {}) {
+  const page = Number(options.page) > 0 ? Number(options.page) : 1;
+  const pageSize = Number(options.pageSize) > 0 ? Number(options.pageSize) : 10;
+
+  const offset = (page - 1) * pageSize;
+
+  const countResult = await query(
+    `SELECT COUNT(*)::int AS count FROM firms`,
+    []
+  );
+  const total = countResult.rows[0]?.count ?? 0;
+
+  const result = await query(
+    `SELECT * FROM firms ORDER BY name ASC LIMIT $1 OFFSET $2`,
+    [pageSize, offset]
+  );
+
+  return {
+    rows: result.rows.map(parseFirmRow),
+    total,
+  };
+}
+
 // ============================================================
 // SQLITE VERSION (COMMENTED OUT)
 // ============================================================
@@ -344,6 +370,7 @@ module.exports = {
   createFirm,
   getFirmById,
   listFirms,
+  listFirmsPaged,
   updateFirm,
   deleteFirm,
 };

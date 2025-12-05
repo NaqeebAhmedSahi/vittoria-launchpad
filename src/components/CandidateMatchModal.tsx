@@ -69,7 +69,7 @@ export function CandidateMatchModal({
       
       // Load candidates
       api.candidate
-        .list()
+        .list("ACTIVE")
         .then((rows: any[]) => {
           const mapped = rows.map((row: any) => ({
             id: row.id,

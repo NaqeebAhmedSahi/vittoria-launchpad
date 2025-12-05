@@ -92,13 +92,16 @@ export default function Firms() {
   const [platformFilter, setPlatformFilter] = useState("all");
   const [regionFilter, setRegionFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   const { toast } = useToast();
 
-  // Load firms on mount
+  // Load firms on mount + pagination change
   useEffect(() => {
     loadFirms();
-  }, []);
+  }, [page, pageSize]);
 
   // Load mandates when a firm is selected
   useEffect(() => {
@@ -110,10 +113,11 @@ export default function Firms() {
   const loadFirms = async () => {
     try {
       setLoading(true);
-      const result = await window.api.firm.list();
+      const result = await window.api.firm.listPaged({ page, pageSize });
       if (result.success && result.firms) {
         setFirms(result.firms);
-        console.log("[Firms] Loaded firms:", result.firms);
+        setTotal(result.total ?? 0);
+        console.log("[Firms] Loaded firms (paged):", result.firms);
       } else {
         console.error("[Firms] Error loading firms:", result.error);
         toast({
@@ -167,6 +171,19 @@ export default function Firms() {
       regionFilter === "all" || firm.regions.includes(regionFilter);
     return matchesSearch && matchesPlatform && matchesRegion;
   });
+
+  const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextSize = parseInt(value, 10) || 10;
+    setPageSize(nextSize);
+    setPage(1);
+  };
 
   // ---- CRUD handlers ----------------------------------------
 
@@ -362,108 +379,171 @@ export default function Firms() {
                 </Button>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Firm Name</TableHead>
-                    <TableHead>Platform Type</TableHead>
-                    <TableHead>Sectors</TableHead>
-                    <TableHead>Regions</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredFirms.map((firm) => (
-                    <TableRow
-                      key={firm.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelectedFirm(firm.id)}
-                    >
-                      <TableCell className="font-medium">
-                        {firm.name}
-                        {firm.short_name && (
-                          <span className="text-xs text-muted-foreground ml-2">
-                            ({firm.short_name})
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {firm.platform_type && (
-                          <Badge variant="outline">
-                            {firm.platform_type}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1 flex-wrap">
-                          {firm.sector_focus.slice(0, 2).map((sector, idx) => (
-                            <Badge
-                              key={idx}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {sector}
-                            </Badge>
-                          ))}
-                          {firm.sector_focus.length > 2 && (
-                            <Badge
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              +{firm.sector_focus.length - 2}
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1 flex-wrap">
-                          {firm.regions.slice(0, 2).map((region, idx) => (
-                            <Badge
-                              key={idx}
-                              variant="outline"
-                              className="text-xs"
-                            >
-                              {region}
-                            </Badge>
-                          ))}
-                          {firm.regions.length > 2 && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs"
-                            >
-                              +{firm.regions.length - 2}
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right space-x-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDialogMode("edit");
-                            setEditingFirm(firm);
-                            setIsDialogOpen(true);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteFirm(firm.id, firm.name);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Firm Name</TableHead>
+                      <TableHead>Platform Type</TableHead>
+                      <TableHead>Sectors</TableHead>
+                      <TableHead>Regions</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredFirms.map((firm) => (
+                      <TableRow
+                        key={firm.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => setSelectedFirm(firm.id)}
+                      >
+                        <TableCell className="font-medium">
+                          {firm.name}
+                          {firm.short_name && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({firm.short_name})
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {firm.platform_type && (
+                            <Badge variant="outline">
+                              {firm.platform_type}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {firm.sector_focus.slice(0, 2).map((sector, idx) => (
+                              <Badge
+                                key={idx}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {sector}
+                              </Badge>
+                            ))}
+                            {firm.sector_focus.length > 2 && (
+                              <Badge
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                +{firm.sector_focus.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {firm.regions.slice(0, 2).map((region, idx) => (
+                              <Badge
+                                key={idx}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {region}
+                              </Badge>
+                            ))}
+                            {firm.regions.length > 2 && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                +{firm.regions.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDialogMode("edit");
+                              setEditingFirm(firm);
+                              setIsDialogOpen(true);
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteFirm(firm.id, firm.name);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>Items per page</span>
+                      <Select
+                        value={String(pageSize)}
+                        onValueChange={handlePageSizeChange}
+                      >
+                        <SelectTrigger className="h-8 w-[80px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="text-xs">
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="30">30</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      {total > 0 ? (
+                        (() => {
+                          const start = (page - 1) * pageSize + 1;
+                          const end = Math.min(page * pageSize, total);
+                          return (
+                            <span>
+                              Showing {start}-{end} of {total} firms
+                            </span>
+                          );
+                        })()
+                      ) : (
+                        <span>Showing 0 firms</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 text-xs"
+                      onClick={() => handlePageChange(page - 1)}
+                      disabled={page <= 1}
+                    >
+                      {"<"}
+                    </Button>
+                    <div className="px-2 text-xs min-w-[56px] text-center">
+                      Page {page} of {isNaN(totalPages) ? 1 : totalPages}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 text-xs"
+                      onClick={() => handlePageChange(page + 1)}
+                      disabled={page >= totalPages}
+                    >
+                      {">"}
+                    </Button>
+                  </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

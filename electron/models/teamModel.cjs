@@ -16,6 +16,38 @@ const TeamModel = {
     return rows;
   },
   
+  async listPaged(filters = {}) {
+    const page = Number(filters.page) > 0 ? Number(filters.page) : 1;
+    const pageSize = Number(filters.pageSize) > 0 ? Number(filters.pageSize) : 10;
+
+    const offset = (page - 1) * pageSize;
+
+    let whereSql = 'WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+
+    if (filters.firm_id) {
+      whereSql += ` AND firm_id = $${paramIndex++}`;
+      params.push(filters.firm_id);
+    }
+
+    const countResult = await db.query(
+      `SELECT COUNT(*)::int AS count FROM teams ${whereSql}`,
+      params
+    );
+    const total = countResult.rows[0]?.count ?? 0;
+
+    const result = await db.query(
+      `SELECT * FROM teams ${whereSql} ORDER BY name ASC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+      [...params, pageSize, offset]
+    );
+
+    return {
+      rows: result.rows,
+      total,
+    };
+  },
+  
   async getById(id) {
     const { rows } = await db.query('SELECT * FROM teams WHERE id = $1', [id]);
     return rows[0] || null;

@@ -1,6 +1,7 @@
 const { ipcMain } = require("electron");
 const {
   listIntakeFiles,
+  listIntakeFilesPaged,
   createIntakeFiles,
   updateIntakeStatus,
   updateParsedJson,
@@ -12,6 +13,10 @@ const {
 function registerIntakeIpcHandlers() {
   ipcMain.handle("intake:list", async () => {
     return listIntakeFiles();
+  });
+
+  ipcMain.handle("intake:listPaged", async (_event, options) => {
+    return listIntakeFilesPaged(options || {});
   });
 
   ipcMain.handle("intake:addFiles", async (_event, files) => {

@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -38,17 +45,23 @@ const SourceDirectory: React.FC = () => {
   const [sortBy, setSortBy] = useState<SortBy>("similarity");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [allSources, setAllSources] = useState<Source[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     (async () => {
       try {
-        const result = await window.api.source.list();
-        if (result && result.success) setAllSources(result.sources);
+        const result = await window.api.source.listPaged({ page, pageSize });
+        if (result && result.success) {
+          setAllSources(result.sources || []);
+          setTotal(result.total ?? (result.sources?.length ?? 0));
+        }
       } catch (err) {
         // Optionally show error toast
       }
     })();
-  }, []);
+  }, [page, pageSize]);
        
 
   // Filter and sort
@@ -84,6 +97,19 @@ const SourceDirectory: React.FC = () => {
 
       return sortOrder === "asc" ? comparison : -comparison;
     });
+
+  const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextSize = parseInt(value, 10) || 10;
+    setPageSize(nextSize);
+    setPage(1);
+  };
 
   const toggleSort = (column: SortBy) => {
     if (sortBy === column) {
@@ -154,9 +180,7 @@ const SourceDirectory: React.FC = () => {
         </CardHeader>
 
         <CardContent>
-          <div className="text-sm text-muted-foreground mb-4">
-            Showing {filteredSources.length} of {allSources.length} sources
-          </div>
+
 
           <Table>
             <TableHeader>
@@ -282,6 +306,67 @@ const SourceDirectory: React.FC = () => {
               )}
             </TableBody>
           </Table>
+
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Items per page</span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={handlePageSizeChange}
+                >
+                  <SelectTrigger className="h-8 w-[80px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="text-xs">
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="30">30</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                {total > 0 ? (
+                  (() => {
+                    const start = (page - 1) * pageSize + 1;
+                    const end = Math.min(page * pageSize, total);
+                    return (
+                      <span>
+                        Showing {start}-{end} of {total} sources
+                      </span>
+                    );
+                  })()
+                ) : (
+                  <span>Showing 0 sources</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 text-xs"
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page <= 1}
+              >
+                {"<"}
+              </Button>
+              <div className="px-2 text-xs min-w-[56px] text-center">
+                Page {page} of {isNaN(totalPages) ? 1 : totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 text-xs"
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page >= totalPages}
+              >
+                {">"}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

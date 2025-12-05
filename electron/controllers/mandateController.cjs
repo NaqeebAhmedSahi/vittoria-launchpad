@@ -3,6 +3,7 @@ const {
   createMandate,
   getMandateById,
   listMandates,
+  listMandatesPaged,
   updateMandate,
   deleteMandate,
   addCandidateToMandate,
@@ -23,6 +24,19 @@ function registerMandateIpcHandlers() {
       return { success: true, mandates };
     } catch (error) {
       console.error("[mandateController] Error listing mandates:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  /**
+   * List mandates with pagination and optional filters
+   */
+  ipcMain.handle("mandate:listPaged", async (_event, options = {}) => {
+    try {
+      const result = await listMandatesPaged(options);
+      return { success: true, mandates: result.rows, total: result.total };
+    } catch (error) {
+      console.error("[mandateController] Error listing mandates (paged):", error);
       return { success: false, error: error.message };
     }
   });

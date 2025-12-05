@@ -260,6 +260,46 @@ async function listMandates(options = {}) {
   return result.rows.map(parseMandateRow);
 }
 
+/**
+ * List mandates with pagination and optional filters (PostgreSQL)
+ */
+async function listMandatesPaged(options = {}) {
+  const page = Number(options.page) > 0 ? Number(options.page) : 1;
+  const pageSize = Number(options.pageSize) > 0 ? Number(options.pageSize) : 10;
+
+  const offset = (page - 1) * pageSize;
+
+  let whereSql = `WHERE 1=1`;
+  const params = [];
+  let paramIndex = 1;
+
+  if (options.firm_id) {
+    whereSql += ` AND firm_id = $${paramIndex++}`;
+    params.push(options.firm_id);
+  }
+
+  if (options.status) {
+    whereSql += ` AND status = $${paramIndex++}`;
+    params.push(options.status);
+  }
+
+  const countResult = await query(
+    `SELECT COUNT(*)::int AS count FROM mandates ${whereSql}`,
+    params
+  );
+  const total = countResult.rows[0]?.count ?? 0;
+
+  const result = await query(
+    `SELECT * FROM mandates ${whereSql} ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+    [...params, pageSize, offset]
+  );
+
+  return {
+    rows: result.rows.map(parseMandateRow),
+    total,
+  };
+}
+
 // ============================================================
 // SQLITE VERSION (COMMENTED OUT)
 // ============================================================
@@ -590,6 +630,7 @@ module.exports = {
   createMandate,
   getMandateById,
   listMandates,
+  listMandatesPaged,
   updateMandate,
   deleteMandate,
   addCandidateToMandate,

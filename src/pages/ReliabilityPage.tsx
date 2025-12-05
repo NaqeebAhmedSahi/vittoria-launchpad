@@ -35,15 +35,19 @@ export default function ReliabilityPage() {
   const [sectorFilter, setSectorFilter] = useState<string>("all");
   const [sources, setSources] = useState<SourceReliabilityListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     let mounted = true;
 
     const fetchSources = async () => {
       try {
-        const response = await window.api.reliability.listSources();
+        const response = await window.api.reliability.listSources({ page, pageSize });
         if (mounted) {
           setSources(response.items || []);
+          setTotal(response.total ?? (response.items?.length ?? 0));
         }
       } catch (error: any) {
         console.error("Failed to load reliability data", error);
@@ -62,7 +66,20 @@ export default function ReliabilityPage() {
     return () => {
       mounted = false;
     };
-  }, [toast]);
+  }, [toast, page, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextSize = parseInt(value, 10) || 10;
+    setPageSize(nextSize);
+    setPage(1);
+  };
 
   const uniqueRoles = useMemo(() => {
     const roles = new Set<string>();
@@ -269,55 +286,113 @@ export default function ReliabilityPage() {
                 </TableRow>
               )}
               {filteredSources.map(({ source, reliability_profile }) => (
-                  <TableRow key={source.id}>
-                    <TableCell>
-                      <div className="font-medium">{source.name}</div>
-                      <div className="text-xs text-muted-foreground">{source.role}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div>{source.organisation}</div>
-                      <div className="flex flex-wrap gap-1 pt-1">
-                        {source.sectors.slice(0, 2).map((sector) => (
-                          <Badge key={sector} variant="outline" className="text-xs">
-                            {sector}
-                          </Badge>
-                        ))}
-                        {source.sectors.length > 2 && (
-                          <span className="text-xs text-muted-foreground">+{source.sectors.length - 2}</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {reliability_profile ? (
-                        <StatusChip
-                          status={`${formatPercent(reliability_profile.reliability_score)}`}
-                          variant={getChipVariant(reliability_profile.reliability_score)}
-                        />
-                      ) : (
-                        <Badge variant="outline">Not evaluated</Badge>
+                <TableRow key={source.id}>
+                  <TableCell>
+                    <div className="font-medium">{source.name}</div>
+                    <div className="text-xs text-muted-foreground">{source.role}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div>{source.organisation}</div>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {source.sectors.slice(0, 2).map((sector) => (
+                        <Badge key={sector} variant="outline" className="text-xs">
+                          {sector}
+                        </Badge>
+                      ))}
+                      {source.sectors.length > 2 && (
+                        <span className="text-xs text-muted-foreground">+{source.sectors.length - 2}</span>
                       )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {reliability_profile ? formatPercent(reliability_profile.components.accuracy) : "—"}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {reliability_profile ? formatPercent(reliability_profile.components.consistency) : "—"}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {reliability_profile ? formatPercent(reliability_profile.components.impact) : "—"}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {reliability_profile?.evaluated_recommendations ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/reliability/sources/${source.id}`)}>
-                        View detail
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {reliability_profile ? (
+                      <StatusChip
+                        status={`${formatPercent(reliability_profile.reliability_score)}`}
+                        variant={getChipVariant(reliability_profile.reliability_score)}
+                      />
+                    ) : (
+                      <Badge variant="outline">Not evaluated</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {reliability_profile ? formatPercent(reliability_profile.components.accuracy) : "—"}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {reliability_profile ? formatPercent(reliability_profile.components.consistency) : "—"}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {reliability_profile ? formatPercent(reliability_profile.components.impact) : "—"}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {reliability_profile?.evaluated_recommendations ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/reliability/sources/${source.id}`)}>
+                      View detail
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Items per page</span>
+                <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+                  <SelectTrigger className="h-8 w-[80px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="text-xs">
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="30">30</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                {total > 0 ? (
+                  (() => {
+                    const start = (page - 1) * pageSize + 1;
+                    const end = Math.min(page * pageSize, total);
+                    return (
+                      <span>
+                        Showing {start}-{end} of {total} sources
+                      </span>
+                    );
+                  })()
+                ) : (
+                  <span>Showing 0 sources</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 text-xs"
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page <= 1}
+              >
+                {"<"}
+              </Button>
+              <div className="px-2 text-xs min-w-[56px] text-center">
+                Page {page} of {isNaN(totalPages) ? 1 : totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 text-xs"
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page >= totalPages}
+              >
+                {">"}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

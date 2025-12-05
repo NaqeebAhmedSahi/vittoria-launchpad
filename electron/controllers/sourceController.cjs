@@ -12,6 +12,16 @@ function registerSourceIpcHandlers() {
     }
   });
 
+	ipcMain.handle('source:listPaged', async (_event, filters) => {
+		try {
+			const result = await sourceService.listPaged(filters || {});
+			return { success: true, sources: result.rows, total: result.total };
+		} catch (error) {
+			console.error('[sourceController] Error listing sources (paged):', error);
+			return { success: false, error: error.message };
+		}
+	});
+
   ipcMain.handle('source:getById', async (_event, id) => {
     try {
       const source = await sourceService.getById(id);

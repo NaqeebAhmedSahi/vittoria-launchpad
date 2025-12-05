@@ -2,9 +2,9 @@ const { ipcMain } = require("electron");
 const reliabilityService = require("../services/reliabilityService.cjs");
 
 function registerReliabilityIpcHandlers() {
-  ipcMain.handle("reliability:listSources", async () => {
+  ipcMain.handle("reliability:listSources", async (_event, options = {}) => {
     try {
-      const response = await reliabilityService.listSources();
+      const response = await reliabilityService.listSources(options || {});
       return { success: true, ...response };
     } catch (error) {
       console.error("[reliabilityController] Error listing sources:", error);
@@ -26,6 +26,8 @@ function registerReliabilityIpcHandlers() {
 module.exports = {
   registerReliabilityIpcHandlers,
 };
+
+
 
 
 

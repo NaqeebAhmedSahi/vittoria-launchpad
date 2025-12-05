@@ -3,6 +3,7 @@ const {
   createFirm,
   getFirmById,
   listFirms,
+  listFirmsPaged,
   updateFirm,
   deleteFirm,
 } = require("../models/firmModel.cjs");
@@ -20,6 +21,19 @@ function registerFirmIpcHandlers() {
       return { success: true, firms };
     } catch (error) {
       console.error("[firmController] Error listing firms:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  /**
+   * List firms with pagination
+   */
+  ipcMain.handle("firm:listPaged", async (_event, options = {}) => {
+    try {
+      const result = await listFirmsPaged(options || {});
+      return { success: true, firms: result.rows, total: result.total };
+    } catch (error) {
+      console.error("[firmController] Error listing firms (paged):", error);
       return { success: false, error: error.message };
     }
   });

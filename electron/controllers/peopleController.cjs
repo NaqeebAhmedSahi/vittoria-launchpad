@@ -12,6 +12,16 @@ function registerPeopleIpcHandlers() {
     }
   });
 
+  ipcMain.handle('people:listPaged', async (_event, filters) => {
+    try {
+      const result = await peopleService.listPaged(filters || {});
+      return { success: true, people: result.rows, total: result.total };
+    } catch (error) {
+      console.error('[peopleController] Error listing people (paged):', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('people:getById', async (_event, id) => {
     try {
       const person = await peopleService.getById(id);

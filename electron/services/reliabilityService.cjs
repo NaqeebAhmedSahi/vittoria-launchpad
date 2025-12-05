@@ -154,8 +154,24 @@ function groupEventsBySource(events) {
 }
 
 module.exports = {
-  async listSources() {
-    const { rows: sourceRows } = await db.query(`SELECT * FROM sources ORDER BY name ASC`);
+  async listSources(options = {}) {
+    const page = Number(options.page) > 0 ? Number(options.page) : 1;
+    const pageSize = Number(options.pageSize) > 0 ? Number(options.pageSize) : 10;
+
+    const offset = (page - 1) * pageSize;
+
+    // Total number of sources (for pagination metadata)
+    const countResult = await db.query(
+      `SELECT COUNT(*)::int AS count FROM sources`,
+      []
+    );
+    const total = countResult.rows[0]?.count ?? 0;
+
+    // Page of sources
+    const { rows: sourceRows } = await db.query(
+      `SELECT * FROM sources ORDER BY name ASC LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
     const sourceIds = sourceRows.map((row) => row.id);
     const events = await fetchEventsForSources(sourceIds);
     const grouped = groupEventsBySource(events);
@@ -169,9 +185,9 @@ module.exports = {
 
     return {
       items,
-      total: items.length,
-      page: 1,
-      page_size: items.length,
+      total,
+      page,
+      page_size: pageSize,
     };
   },
 
@@ -270,6 +286,8 @@ module.exports = {
     };
   },
 };
+
+
 
 
 

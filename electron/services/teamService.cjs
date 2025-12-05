@@ -5,6 +5,10 @@ module.exports = {
     return await TeamModel.list(firmId);
   },
   
+  async listPaged(filters) {
+    return await TeamModel.listPaged(filters);
+  },
+  
   async getById(id) {
     return await TeamModel.getById(id);
   },

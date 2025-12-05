@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   source: {
     list: () => ipcRenderer.invoke("source:list"),
+    listPaged: (options) => ipcRenderer.invoke("source:listPaged", options),
     getById: (id) => ipcRenderer.invoke("source:getById", id),
     create: (data) => ipcRenderer.invoke("source:create", data),
     getOrgPattern: () => ipcRenderer.invoke("source:getOrgPattern"),
@@ -33,7 +34,7 @@ contextBridge.exposeInMainWorld("api", {
     listByMandate: (mandateId) => ipcRenderer.invoke("outcome:listByMandate", mandateId),
   },
   reliability: {
-    listSources: () => ipcRenderer.invoke("reliability:listSources"),
+    listSources: (options) => ipcRenderer.invoke("reliability:listSources", options),
     getSourceDetail: (sourceId) => ipcRenderer.invoke("reliability:getSourceDetail", sourceId),
   },
   ping: () => "pong",
@@ -95,6 +96,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   intake: {
     list: () => ipcRenderer.invoke("intake:list"),
+    listPaged: (options) => ipcRenderer.invoke("intake:listPaged", options),
     addFiles: (files) => ipcRenderer.invoke("intake:addFiles", files),
     updateStatus: (id, status) =>
       ipcRenderer.invoke("intake:updateStatus", { id, status }),
@@ -139,6 +141,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   firm: {
     list: () => ipcRenderer.invoke("firm:list"),
+    listPaged: (options) => ipcRenderer.invoke("firm:listPaged", options),
     getById: (firmId) => ipcRenderer.invoke("firm:getById", firmId),
     create: (firmData) => ipcRenderer.invoke("firm:create", firmData),
     update: (firmId, updates) => ipcRenderer.invoke("firm:update", { firmId, updates }),
@@ -146,6 +149,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   mandate: {
     list: (options) => ipcRenderer.invoke("mandate:list", options),
+    listPaged: (options) => ipcRenderer.invoke("mandate:listPaged", options),
     getById: (mandateId) => ipcRenderer.invoke("mandate:getById", mandateId),
     create: (mandateData) => ipcRenderer.invoke("mandate:create", mandateData),
     update: (mandateId, updates) => ipcRenderer.invoke("mandate:update", { mandateId, updates }),
@@ -162,6 +166,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   team: {
     list: (firmId) => ipcRenderer.invoke("team:list", firmId),
+    listPaged: (filters) => ipcRenderer.invoke("team:listPaged", filters),
     getById: (id) => ipcRenderer.invoke("team:getById", id),
     create: (data) => ipcRenderer.invoke("team:create", data),
     update: (id, data) => ipcRenderer.invoke("team:update", { id, data }),
@@ -170,6 +175,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   people: {
     list: (filters) => ipcRenderer.invoke("people:list", filters),
+    listPaged: (filters) => ipcRenderer.invoke("people:listPaged", filters),
     getById: (id) => ipcRenderer.invoke("people:getById", id),
     create: (data) => ipcRenderer.invoke("people:create", data),
     update: (id, data) => ipcRenderer.invoke("people:update", { id, data }),

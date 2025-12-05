@@ -99,6 +99,7 @@ declare global {
       ping: () => string;
       source: {
         list(): Promise<{ success: boolean; sources?: any[]; error?: string }>;
+        listPaged(options: { page: number; pageSize: number }): Promise<{ success: boolean; sources?: any[]; total?: number; error?: string }>;
         getById(id: number): Promise<{ success: boolean; source?: any; org_pattern?: any; error?: string }>;
         create(data: any): Promise<{ success: boolean; source?: any; error?: string }>;
         getOrgPattern(): Promise<{ success: boolean; pattern?: any; error?: string }>;
@@ -115,8 +116,8 @@ declare global {
         listByMandate(mandateId: number): Promise<{ success: boolean; data?: MandateOutcomeLogResponse; error?: string }>;
       };
       reliability: {
-        listSources(): Promise<{ success: boolean } & SourceReliabilityListResponse>;
-        getSourceDetail(sourceId: number | string): Promise<{ success: boolean; detail?: SourceReliabilityDetailResponse; error?: string }>;
+        listSources(options?: { page?: number; pageSize?: number }): Promise<SourceReliabilityListResponse>;
+        getSourceDetail(sourceId: number): Promise<{ success: boolean; detail?: SourceReliabilityDetailResponse; error?: string }>;
       };
       setup: {
         isCompleted(): Promise<{ success: boolean; completed: boolean }>;
@@ -212,6 +213,7 @@ declare global {
       };
       intake: {
         list(): Promise<IntakeDbRow[]>;
+        listPaged(options: { page: number; pageSize: number }): Promise<{ rows: IntakeDbRow[]; total: number }>;
         addFiles(files: IntakeFileInput[]): Promise<IntakeDbRow[]>;
         updateStatus(id: number, status: string): Promise<IntakeDbRow>;
         updateParsedJson(payload: { intakeId: number; updatedJson: any; reScore?: boolean }): Promise<IntakeDbRow>;
@@ -278,6 +280,7 @@ declare global {
       };
       firm: {
         list(): Promise<{ success: boolean; firms?: Firm[]; error?: string }>;
+        listPaged(options: { page: number; pageSize: number }): Promise<{ success: boolean; firms?: Firm[]; total?: number; error?: string }>;
         getById(firmId: number): Promise<{ success: boolean; firm?: Firm; error?: string }>;
         create(firmData: Partial<Firm>): Promise<{ success: boolean; firmId?: number; error?: string }>;
         update(firmId: number, updates: Partial<Firm>): Promise<{ success: boolean; error?: string }>;
@@ -285,6 +288,7 @@ declare global {
       };
       mandate: {
         list(options?: { firm_id?: number; status?: string }): Promise<{ success: boolean; mandates?: Mandate[]; error?: string }>;
+        listPaged(options: { page: number; pageSize: number; firm_id?: number; status?: string }): Promise<{ success: boolean; mandates?: Mandate[]; total?: number; error?: string }>;
         getById(mandateId: number): Promise<{ success: boolean; mandate?: Mandate; error?: string }>;
         create(mandateData: Partial<Mandate>): Promise<{ success: boolean; mandateId?: number; error?: string }>;
         update(mandateId: number, updates: Partial<Mandate>): Promise<{ success: boolean; error?: string }>;
@@ -301,6 +305,7 @@ declare global {
       };
       team: {
         list(firmId?: number): Promise<{ success: boolean; teams?: Team[]; error?: string }>;
+        listPaged(filters: { page: number; pageSize: number; firm_id?: number }): Promise<{ success: boolean; teams?: Team[]; total?: number; error?: string }>;
         getById(id: number): Promise<{ success: boolean; team?: Team; error?: string }>;
         create(data: Partial<Team>): Promise<{ success: boolean; teamId?: number; error?: string }>;
         update(id: number, data: Partial<Team>): Promise<{ success: boolean; error?: string }>;
@@ -309,6 +314,7 @@ declare global {
       };
       people: {
         list(filters?: { firm_id?: number; team_id?: number; search?: string }): Promise<{ success: boolean; people?: Person[]; error?: string }>;
+        listPaged(filters: { page: number; pageSize: number; firm_id?: number; team_id?: number; search?: string }): Promise<{ success: boolean; people?: Person[]; total?: number; error?: string }>;
         getById(id: number): Promise<{ success: boolean; person?: Person; error?: string }>;
         create(data: Partial<Person>): Promise<{ success: boolean; personId?: number; error?: string }>;
         update(id: number, data: Partial<Person>): Promise<{ success: boolean; error?: string }>;

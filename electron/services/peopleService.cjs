@@ -5,6 +5,10 @@ module.exports = {
     return await PeopleModel.list(filters);
   },
   
+  async listPaged(filters) {
+    return await PeopleModel.listPaged(filters);
+  },
+  
   async getById(id) {
     return await PeopleModel.getById(id);
   },

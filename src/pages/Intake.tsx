@@ -28,6 +28,13 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Upload, FolderPlus, Search, FileText, Eye, Copy, Award, CheckCircle, XCircle, Clock, Edit, X, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // NEW: overlay spinner
 import { ParsingOverlay } from "@/components/ParsingOverlay";
@@ -48,6 +55,7 @@ type IntakeItem = {
   variant: "info" | "warning" | "success" | "destructive" | "error" | "neutral";
   qualityScore?: number;
   candidateId?: number;
+  actionLocked?: boolean;
 };
 
 const statusFilters = [
@@ -91,6 +99,10 @@ export default function Intake() {
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [data, setData] = useState<IntakeItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+
   const [candidateDialogOpen, setCandidateDialogOpen] = useState(false);
   const [candidateName, setCandidateName] = useState("");
   const [candidateSelectedFiles, setCandidateSelectedFiles] = useState<File[]>([]);
@@ -145,12 +157,15 @@ export default function Intake() {
     };
   }, [api]);
 
-  // Load initial data from SQLite
+  // Load paginated data
   useEffect(() => {
     api.intake
-      .list()
-      .then((rows) => setData(rows.map(mapDbRowToItem)))
-      .catch((err) => {
+      .listPaged({ page, pageSize })
+      .then((res: { rows: IntakeDbRow[]; total: number }) => {
+        setData(res.rows.map(mapDbRowToItem));
+        setTotal(res.total ?? 0);
+      })
+      .catch((err: any) => {
         console.error(err);
         toast({
           title: "Error loading intake data",
@@ -158,7 +173,7 @@ export default function Intake() {
           variant: "destructive",
         });
       });
-  }, [toast]);
+  }, [toast, page, pageSize]);
 
   // Handler for drag-drop dialog
   const handleDragDropDialogFiles = async (files: File[]) => {
@@ -213,6 +228,21 @@ export default function Intake() {
     return matchesStatus && matchesSearch;
   });
 
+  const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setSelectedRows([]);
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextSize = parseInt(value, 10) || 10;
+    setPageSize(nextSize);
+    setPage(1);
+    setSelectedRows([]);
+  };
+
   const toggleRow = (id: number) => {
     setSelectedRows((prev) =>
       prev.includes(id)
@@ -231,8 +261,11 @@ export default function Intake() {
 
   const refreshFromDb = () => {
     api.intake
-      .list()
-      .then((rows) => setData(rows.map(mapDbRowToItem)))
+      .listPaged({ page, pageSize })
+      .then((res: { rows: IntakeDbRow[]; total: number }) => {
+        setData(res.rows.map(mapDbRowToItem));
+        setTotal(res.total ?? 0);
+      })
       .catch(console.error);
   };
 
@@ -612,6 +645,14 @@ export default function Intake() {
         title: "Candidate Approved",
         description: "Candidate status changed to ACTIVE",
       });
+      // Lock actions for this row locally so buttons disappear immediately
+      setData((prev) =>
+        prev.map((row) =>
+          row.id === item.id
+            ? { ...row, status: "Approved", actionLocked: true }
+            : row
+        )
+      );
       refreshFromDb();
     } catch (err) {
       console.error("Approval failed:", err);
@@ -639,6 +680,14 @@ export default function Intake() {
         title: "Candidate Rejected",
         description: "Candidate status changed to ARCHIVED",
       });
+      // Lock actions for this row locally so buttons disappear immediately
+      setData((prev) =>
+        prev.map((row) =>
+          row.id === item.id
+            ? { ...row, status: "Rejected", actionLocked: true }
+            : row
+        )
+      );
       refreshFromDb();
     } catch (err) {
       console.error("Rejection failed:", err);
@@ -940,7 +989,12 @@ export default function Intake() {
                             ? "View JSON"
                             : "Parse JSON"}
                         </Button>
-                        {(item.status === "Parsed" || item.qualityScore !== undefined) && (
+                        {(item.status === "Parsed" ||
+                          item.qualityScore !== undefined) &&
+                          !item.actionLocked &&
+                          !["Approved", "Rejected", "Deferred"].includes(
+                            item.status
+                          ) && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -954,9 +1008,10 @@ export default function Intake() {
                             Edit
                           </Button>
                         )}
-                        {item.status === "Parsed" || item.qualityScore !== undefined ? (
+                        {item.status === "Parsed" ||
+                        item.qualityScore !== undefined ? (
                           <>
-                            {!item.candidateId && (
+                            {!item.candidateId && !item.actionLocked && (
                               <Button
                                 size="sm"
                                 variant="default"
@@ -970,48 +1025,52 @@ export default function Intake() {
                                 Score CV
                               </Button>
                             )}
-                            {item.candidateId && item.status !== "APPROVED" && item.status !== "REJECTED" && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  className="text-xs gap-1 bg-green-600 hover:bg-green-700"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleApproveCandidate(item);
-                                  }}
-                                >
-                                  <CheckCircle className="h-3.5 w-3.5" />
-                                  Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="text-xs gap-1"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRejectCandidate(item);
-                                  }}
-                                >
-                                  <XCircle className="h-3.5 w-3.5" />
-                                  Reject
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-xs gap-1 border-orange-500 text-orange-600 hover:bg-orange-50"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeferCandidate(item);
-                                  }}
-                                >
-                                  <Clock className="h-3.5 w-3.5" />
-                                  Defer
-                                </Button>
-                              </>
-                            )}
+                            {item.candidateId &&
+                              !item.actionLocked &&
+                              !["approved", "rejected", "deferred"].includes(
+                                item.status.toLowerCase()
+                              ) && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="text-xs gap-1 bg-green-600 hover:bg-green-700"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleApproveCandidate(item);
+                                    }}
+                                  >
+                                    <CheckCircle className="h-3.5 w-3.5" />
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="text-xs gap-1"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRejectCandidate(item);
+                                    }}
+                                  >
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    Reject
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs gap-1 border-orange-500 text-orange-600 hover:bg-orange-50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeferCandidate(item);
+                                    }}
+                                  >
+                                    <Clock className="h-3.5 w-3.5" />
+                                    Defer
+                                  </Button>
+                                </>
+                              )}
                           </>
-                        ) : (
+                        ) : !item.actionLocked ? (
                           <Button
                             size="sm"
                             variant="default"
@@ -1024,7 +1083,7 @@ export default function Intake() {
                             <Award className="h-3.5 w-3.5" />
                             Score CV
                           </Button>
-                        )}
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1055,6 +1114,70 @@ export default function Intake() {
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/* Pagination footer */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+            <div className="flex items-center gap-4">
+
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Items per page</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={handlePageSizeChange}
+              >
+                <SelectTrigger className="h-8 w-[80px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="text-xs">
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="30">30</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="text-xs text-muted-foreground">
+              {total > 0 ? (
+                (() => {
+                  const start = (page - 1) * pageSize + 1;
+                  const end = Math.min(page * pageSize, total);
+                  return (
+                    <span>
+                      Showing {start}-{end} of {total} items
+                    </span>
+                  );
+                })()
+              ) : (
+                <span>Showing 0 items</span>
+              )}
+            </div>
+            </div>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 text-xs"
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page <= 1}
+                >
+                  {"<"}
+                </Button>
+                <div className="px-2 text-xs min-w-[56px] text-center">
+                  Page {page} of {isNaN(totalPages) ? 1 : totalPages}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 text-xs"
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page >= totalPages}
+                >
+                  {">"}
+                </Button>
+              </div>
+
           </div>
         </CardContent>
       </Card>

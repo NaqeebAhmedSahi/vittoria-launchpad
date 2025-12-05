@@ -139,6 +139,8 @@ export default function Approvals() {
         description: 'Candidate decision has been deferred',
       });
       await loadRecords();
+      setSelectedRecord(null);
+      setDeferDialogOpen(false);
     } catch (error) {
       console.error('Deferral failed:', error);
       toast({

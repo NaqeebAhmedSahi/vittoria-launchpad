@@ -12,6 +12,16 @@ function registerTeamIpcHandlers() {
     }
   });
 
+  ipcMain.handle('team:listPaged', async (_event, filters) => {
+    try {
+      const result = await teamService.listPaged(filters || {});
+      return { success: true, teams: result.rows, total: result.total };
+    } catch (error) {
+      console.error('[teamController] Error listing teams (paged):', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('team:getById', async (_event, id) => {
     try {
       const team = await teamService.getById(id);

@@ -114,6 +114,8 @@ export default function Candidates() {
   const [data, setData] = useState<UICandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Filters
   const [locationFilter, setLocationFilter] = useState("all");
@@ -127,7 +129,9 @@ export default function Candidates() {
   );
   const [candidateMandates, setCandidateMandates] = useState<any[]>([]);
   const [loadingMandates, setLoadingMandates] = useState(false);
-  const [candidateScores, setCandidateScores] = useState<Map<number, any>>(new Map());
+  const [candidateScores, setCandidateScores] = useState<Map<number, any>>(
+    new Map()
+  );
   const selectedCandidateData = data.find(
     (c) => c.id === selectedCandidate
   );
@@ -180,7 +184,7 @@ export default function Candidates() {
             location: candidate.location,
             skills: [],
           };
-          
+
           // Mock mandate (in production, compute for each active mandate)
           const mockMandate = {
             id: 1,
@@ -203,15 +207,15 @@ export default function Candidates() {
           };
 
           const scoreDetail = getCandidateScoreDetails(candidateData, mockMandate, mockMatchScore);
-          
+
           // Extract summary for display
           const { summary } = scoreDetail;
-          
+
           // Determine bias risk based on divergence
           const divergence = Math.abs(summary.avgSimilarityScore - summary.avgExpertiseScore);
-          const biasRisk: 'high' | 'medium' | 'low' = 
-            divergence > 0.3 ? 'high' : 
-            divergence > 0.15 ? 'medium' : 
+          const biasRisk: 'high' | 'medium' | 'low' =
+            divergence > 0.3 ? 'high' :
+            divergence > 0.15 ? 'medium' :
             'low';
 
           scores.set(candidate.id, {
@@ -342,6 +346,25 @@ export default function Candidates() {
       matchesFunction
     );
   });
+
+  const total = filteredData.length;
+  const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextSize = parseInt(value, 10) || 10;
+    setPageSize(nextSize);
+    setPage(1);
+  };
+
+  const pagedData = filteredData.slice(
+    (page - 1) * pageSize,
+    (page - 1) * pageSize + pageSize
+  );
 
   const clearFilters = () => {
     setLocationFilter("all");
@@ -500,7 +523,7 @@ export default function Candidates() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredData.map((candidate) => {
+                  {pagedData.map((candidate) => {
                     const scoreDetail = candidateScores.get(candidate.id);
                     const biasRisk = scoreDetail?.biasRisk || "low";
                     const expertise = scoreDetail?.expertiseScore || 0;
@@ -508,123 +531,126 @@ export default function Candidates() {
                     const reliability = scoreDetail?.reliabilityScore || 0;
 
                     return (
-                    <TableRow
-                      key={candidate.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelectedCandidate(candidate.id)}
-                    >
-                      <TableCell className="font-medium">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="cursor-help">{candidate.name}</span>
-                            </TooltipTrigger>
-                            <TooltipContent className="w-64">
-                              <div className="space-y-2">
-                                <div className="font-semibold text-sm border-b pb-1">Score Breakdown</div>
-                                <div className="space-y-1 text-xs">
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-muted-foreground">Expertise Match:</span>
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                                        <div 
-                                          className="h-full bg-blue-500" 
-                                          style={{ width: `${expertise * 100}%` }}
-                                        />
+                      <TableRow
+                        key={candidate.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => setSelectedCandidate(candidate.id)}
+                      >
+                        <TableCell className="font-medium">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help">{candidate.name}</span>
+                              </TooltipTrigger>
+                              <TooltipContent className="w-64">
+                                <div className="space-y-2">
+                                  <div className="font-semibold text-sm border-b pb-1">Score Breakdown</div>
+                                  <div className="space-y-1 text-xs">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-muted-foreground">Expertise Match:</span>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                          <div 
+                                            className="h-full bg-blue-500" 
+                                            style={{ width: `${expertise * 100}%` }}
+                                          />
+                                        </div>
+                                        <span className="font-medium w-8 text-right">{(expertise * 100).toFixed(0)}%</span>
                                       </div>
-                                      <span className="font-medium w-8 text-right">{(expertise * 100).toFixed(0)}%</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-muted-foreground">Similarity Match:</span>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                          <div 
+                                            className="h-full bg-amber-500" 
+                                            style={{ width: `${similarity * 100}%` }}
+                                          />
+                                        </div>
+                                        <span className="font-medium w-8 text-right">{(similarity * 100).toFixed(0)}%</span>
+                                      </div>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-muted-foreground">Source Reliability:</span>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                          <div 
+                                            className="h-full bg-green-500" 
+                                            style={{ width: `${reliability * 100}%` }}
+                                          />
+                                        </div>
+                                        <span className="font-medium w-8 text-right">{(reliability * 100).toFixed(0)}%</span>
+                                      </div>
                                     </div>
                                   </div>
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-muted-foreground">Similarity Match:</span>
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                                        <div 
-                                          className="h-full bg-amber-500" 
-                                          style={{ width: `${similarity * 100}%` }}
-                                        />
-                                      </div>
-                                      <span className="font-medium w-8 text-right">{(similarity * 100).toFixed(0)}%</span>
+                                  {biasRisk === "high" && (
+                                    <div className="text-xs text-amber-600 dark:text-amber-400 mt-2 pt-2 border-t">
+                                      ⚠️ High similarity may be influencing ranking
                                     </div>
-                                  </div>
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-muted-foreground">Source Reliability:</span>
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                                        <div 
-                                          className="h-full bg-green-500" 
-                                          style={{ width: `${reliability * 100}%` }}
-                                        />
-                                      </div>
-                                      <span className="font-medium w-8 text-right">{(reliability * 100).toFixed(0)}%</span>
-                                    </div>
-                                  </div>
+                                  )}
                                 </div>
-                                {biasRisk === "high" && (
-                                  <div className="text-xs text-amber-600 dark:text-amber-400 mt-2 pt-2 border-t">
-                                    ⚠️ High similarity may be influencing ranking
-                                  </div>
-                                )}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </TableCell>
-                      <TableCell>{candidate.title}</TableCell>
-                      <TableCell>{candidate.firm}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {candidate.location}
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={candidate.status === 'active' ? 'default' : 'secondary'}
-                          className={`text-xs capitalize ${
-                            candidate.status === 'active' ? 'bg-green-500 hover:bg-green-600' :
-                            candidate.status === 'placed' ? 'bg-purple-500 hover:bg-purple-600' :
-                            candidate.status === 'withdrawn' ? 'bg-red-500 hover:bg-red-600' :
-                            'bg-gray-500 hover:bg-gray-600'
-                          }`}
-                        >
-                          {candidate.status || 'active'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={`text-xs uppercase ${
-                            biasRisk === "high"
-                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                              : biasRisk === "medium"
-                              ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30"
-                              : "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30"
-                          }`}
-                        >
-                          {biasRisk.charAt(0)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {[...candidate.sectors, ...candidate.functions]
-                            .slice(0, 3)
-                            .map((tag, index) => (
-                              <Badge
-                                key={index}
-                                variant="secondary"
-                                className="text-xs bg-secondary/20 text-secondary hover:bg-secondary/30"
-                              >
-                                {tag}
-                              </Badge>
-                            ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {candidate.mandates}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {candidate.lastUpdated}
-                      </TableCell>
-                    </TableRow>
-                  );
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                        <TableCell>{candidate.title}</TableCell>
+                        <TableCell>{candidate.firm}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {candidate.location}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={candidate.status === 'active' ? 'default' : 
+                            candidate.status === 'placed' ? 'secondary' : 
+                            candidate.status === 'withdrawn' ? 'destructive' : 
+                            'outline'}
+                            className={`text-xs capitalize ${
+                              candidate.status === 'active' ? 'bg-green-500 hover:bg-green-600' :
+                              candidate.status === 'placed' ? 'bg-purple-500 hover:bg-purple-600' :
+                              candidate.status === 'withdrawn' ? 'bg-red-500 hover:bg-red-600' :
+                              'bg-gray-500 hover:bg-gray-600'
+                            }`}
+                          >
+                            {candidate.status || 'active'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs uppercase ${
+                              biasRisk === "high"
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                : biasRisk === "medium"
+                                ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30"
+                                : "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30"
+                            }`}
+                          >
+                            {biasRisk.charAt(0)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {[...candidate.sectors, ...candidate.functions]
+                              .slice(0, 3)
+                              .map((tag, index) => (
+                                <Badge
+                                  key={index}
+                                  variant="secondary"
+                                  className="text-xs bg-secondary/20 text-secondary hover:bg-secondary/30"
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {candidate.mandates}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {candidate.lastUpdated}
+                        </TableCell>
+                      </TableRow>
+                    );
                   })}
 
                   {!loading && filteredData.length === 0 && (
@@ -639,6 +665,68 @@ export default function Candidates() {
                   )}
                 </TableBody>
               </Table>
+
+              {/* Pagination footer */}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-3 mt-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Items per page</span>
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={handlePageSizeChange}
+                    >
+                      <SelectTrigger className="h-8 w-[80px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="text-xs">
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="30">30</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    {total > 0 ? (
+                      (() => {
+                        const start = (page - 1) * pageSize + 1;
+                        const end = Math.min(page * pageSize, total);
+                        return (
+                          <span>
+                            Showing {start}-{end} of {total} items
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span>Showing 0 items</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-xs"
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    {"<"}
+                  </Button>
+                  <div className="px-2 text-xs min-w-[56px] text-center">
+                    Page {page} of {isNaN(totalPages) ? 1 : totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-xs"
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages}
+                  >
+                    {">"}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

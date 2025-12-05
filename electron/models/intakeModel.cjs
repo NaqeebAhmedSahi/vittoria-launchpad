@@ -214,6 +214,29 @@ async function listIntakeFiles() {
 }
 
 /**
+ * List intake files with pagination (PostgreSQL)
+ */
+async function listIntakeFilesPaged(options = {}) {
+  const page = Number(options.page) > 0 ? Number(options.page) : 1;
+  const pageSize = Number(options.pageSize) > 0 ? Number(options.pageSize) : 10;
+
+  const offset = (page - 1) * pageSize;
+
+  const totalResult = await query("SELECT COUNT(*)::int AS count FROM intake_files");
+  const total = totalResult.rows[0]?.count ?? 0;
+
+  const result = await query(
+    "SELECT * FROM intake_files ORDER BY uploaded_at DESC, id DESC LIMIT $1 OFFSET $2",
+    [pageSize, offset]
+  );
+
+  return {
+    rows: result.rows,
+    total,
+  };
+}
+
+/**
  * Create intake entries + store file on disk (encrypted/unencrypted)
  */
 async function createIntakeFiles(files) {
@@ -1792,6 +1815,7 @@ async function updateParsedJson(intakeId, updatedJson, reScore = true) {
 // Final exports
 module.exports = {
   listIntakeFiles,
+  listIntakeFilesPaged,
   createIntakeFiles,
   updateIntakeStatus,
   updateParsedJson,

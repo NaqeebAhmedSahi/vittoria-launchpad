@@ -5,6 +5,10 @@ module.exports = {
     return await SourceModel.list();
   },
   
+  async listPaged(filters) {
+    return await SourceModel.listPaged(filters);
+  },
+  
   async getById(id) {
     return await SourceModel.getById(id);
   },

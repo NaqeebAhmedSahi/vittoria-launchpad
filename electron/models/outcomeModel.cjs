@@ -1,4 +1,5 @@
 const db = require("../db/pgConnection.cjs");
+const embeddingClient = require("../services/embeddingClient.cjs");
 
 const OutcomeModel = {
   async create(data) {
@@ -17,7 +18,30 @@ const OutcomeModel = {
     ];
 
     const { rows } = await db.query(query, params);
-    return rows[0];
+    const outcome = rows[0];
+
+    // Generate and persist embedding
+    try {
+      const outcomeSummary = [
+        data.stage || '',
+        data.result || '',
+        data.notes || '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'mandate_outcomes',
+        outcome.id,
+        outcomeSummary,
+        { source: 'outcome_record' }
+      );
+      console.log(`[outcomeModel] ✅ Generated embedding for outcome ${outcome.id}`);
+    } catch (error) {
+      console.error(`[outcomeModel] ⚠️ Failed to generate embedding for outcome ${outcome.id}:`, error.message);
+    }
+
+    return outcome;
   },
 
   async listByMandate(mandateId) {

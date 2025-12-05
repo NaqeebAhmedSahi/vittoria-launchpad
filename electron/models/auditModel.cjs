@@ -1,5 +1,6 @@
 // electron/models/auditModel.cjs
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
 
 const AuditModel = {
   /**
@@ -95,7 +96,31 @@ const AuditModel = {
         data.user_agent || null
       ]
     );
-    return result.rows[0].id;
+    const auditId = result.rows[0].id;
+
+    // Generate and persist embedding
+    try {
+      const auditSummary = [
+        data.entity_type || '',
+        data.action || '',
+        data.changes ? JSON.stringify(data.changes) : '',
+        data.ip_address || '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'audit_log',
+        auditId,
+        auditSummary,
+        { source: 'audit_entry' }
+      );
+      console.log(`[auditModel] ✅ Generated embedding for audit log ${auditId}`);
+    } catch (error) {
+      console.error(`[auditModel] ⚠️ Failed to generate embedding for audit log ${auditId}:`, error.message);
+    }
+
+    return auditId;
   },
 
   /**

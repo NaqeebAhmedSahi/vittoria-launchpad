@@ -1,5 +1,6 @@
 // Employment model for managing employment history
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
 
 const EmploymentModel = {
   async list(filters = {}) {
@@ -61,7 +62,31 @@ const EmploymentModel = {
       data.status || 'Active'
     ];
     const { rows } = await db.query(query, params);
-    return rows[0];
+    const employment = rows[0];
+
+    // Generate and persist embedding
+    try {
+      const employmentSummary = [
+        data.job_title || '',
+        data.start_date || '',
+        data.end_date || '',
+        data.status || 'Active',
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'employments',
+        employment.id,
+        employmentSummary,
+        { source: 'employment_record' }
+      );
+      console.log(`[employmentModel] ✅ Generated embedding for employment ${employment.id}`);
+    } catch (error) {
+      console.error(`[employmentModel] ⚠️ Failed to generate embedding for employment ${employment.id}:`, error.message);
+    }
+
+    return employment;
   },
   
   async update(id, data) {
@@ -111,10 +136,46 @@ const EmploymentModel = {
     values.push(id);
     const query = `UPDATE employments SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
     const { rows } = await db.query(query, values);
-    return rows[0];
+    const employment = rows[0];
+
+    // Update embedding if employment details changed
+    const detailsChanged = data.job_title !== undefined || data.status !== undefined;
+    if (detailsChanged) {
+      try {
+        const vectorStore = require('../services/vectorStore.cjs');
+        const embeddingClient = require('../services/embeddingClient.cjs');
+        const summary = [
+          employment.job_title || '',
+          employment.start_date ? `from ${employment.start_date}` : '',
+          employment.end_date ? `to ${employment.end_date}` : '',
+          employment.status || ''
+        ].filter(Boolean).join(' | ');
+
+        await embeddingClient.generateAndPersistEmbedding(
+          'employments',
+          id,
+          summary,
+          { source: 'employment_update' }
+        );
+        console.log(`✅ Updated embedding for employment ${id}`);
+      } catch (error) {
+        console.error(`⚠️ Failed to update embedding:`, error.message);
+      }
+    }
+
+    return employment;
   },
   
   async delete(id) {
+    try {
+      const vectorStore = require('../services/vectorStore.cjs');
+      // Delete embedding first
+      await vectorStore.deleteEmbedding('employments', id);
+      console.log(`✅ Deleted embedding for employment ${id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to delete embedding:`, error.message);
+    }
+
     await db.query('DELETE FROM employments WHERE id = $1', [id]);
     return true;
   }

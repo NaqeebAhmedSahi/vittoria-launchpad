@@ -61,6 +61,11 @@ import OrgPatternOverview from "./pages/OrgPatternOverview";
 import MandateSimilarityDebug from "./pages/MandateSimilarityDebug";
 import ReliabilityPage from "./pages/ReliabilityPage.tsx";
 import ReliabilitySourceDetail from "./pages/ReliabilitySourceDetail.tsx";
+import EmailManagementPage from "./pages/EmailManagementPage";
+import CalendarPage from "./pages/CalendarPage";
+import IntakeFoldersPage from "./pages/IntakeFoldersPage";
+import OperationsSettingsPage from "./pages/OperationsSettingsPage";
+import ContactsPage from "./pages/ContactsPage";
 
 const queryClient = new QueryClient();
 
@@ -292,6 +297,13 @@ const App = () => {
               <Route path="/edge/hiring-window" element={<MarketHiringWindow />} />
               <Route path="/edge/deal-structure" element={<DealStructureOverview />} />
               <Route path="/edge/firm-archetypes" element={<FirmArchetypeMap />} />
+              
+              {/* Operations Routes */}
+              <Route path="/operations/email" element={<EmailManagementPage />} />
+              <Route path="/operations/calendar" element={<CalendarPage />} />
+              <Route path="/operations/intake-folders" element={<IntakeFoldersPage />} />
+              <Route path="/operations/contacts" element={<ContactsPage />} />
+              <Route path="/operations/settings" element={<OperationsSettingsPage />} />
               
               <Route path="/settings" element={<Settings />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -5,6 +5,110 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * Create pgvector extension in the database
+ * This must be done before running migrations that use vector types
+ */
+async function createPgvectorExtension({ host = 'localhost', port = 5432, username, password, dbName = 'vittoria_launchpad' }) {
+  console.log(`[databaseInitializer] Creating pgvector extension in: ${dbName}`);
+  
+  const { Client } = require('pg');
+  
+  const client = new Client({
+    host,
+    port,
+    user: username,
+    password,
+    database: dbName,
+    connectionTimeoutMillis: 10000,
+  });
+
+  try {
+    await client.connect();
+    
+    // Try to create pgvector extension
+    try {
+      await client.query('CREATE EXTENSION IF NOT EXISTS vector;');
+      console.log('[databaseInitializer] ✓ pgvector extension created successfully');
+      await client.end();
+      return { success: true };
+    } catch (extError) {
+      // If user doesn't have permission, try with postgres superuser
+      if (extError.message.includes('permission denied')) {
+        console.log('[databaseInitializer] Regular user lacks permission, trying with postgres superuser...');
+        await client.end();
+        
+        // Try to create extension as postgres superuser with empty password (peer auth)
+        const superClient = new Client({
+          host,
+          port,
+          user: 'postgres',
+          password: '', // Peer authentication on Linux
+          database: dbName,
+          connectionTimeoutMillis: 5000,
+        });
+        
+        try {
+          await superClient.connect();
+          await superClient.query('CREATE EXTENSION IF NOT EXISTS vector;');
+          console.log('[databaseInitializer] ✓ pgvector extension created successfully (as postgres superuser)');
+          await superClient.end();
+          return { success: true };
+        } catch (superError) {
+          await superClient.end().catch(() => {});
+          
+          // Final fallback: Create a helper script
+          console.warn('[databaseInitializer] ⚠️  Could not create pgvector extension automatically');
+          console.warn('[databaseInitializer] ⚠️  Creating helper script...');
+          
+          const { app } = require('electron');
+          const os = require('os');
+          const scriptPath = path.join(app.getPath('userData'), 'create-pgvector-extension.sh');
+          
+          const scriptContent = `#!/bin/bash
+# Helper script to create pgvector extension
+# Run this script once to enable semantic search features
+
+echo "Creating pgvector extension..."
+sudo -u postgres psql -d ${dbName} -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "✅ pgvector extension created successfully!"
+    echo "You can now restart the application and embeddings will work."
+else
+    echo "❌ Failed to create pgvector extension"
+    echo "Please ensure:"
+    echo "  1. PostgreSQL is running"
+    echo "  2. pgvector is installed: sudo apt install postgresql-16-pgvector"
+    echo "  3. You have sudo access"
+fi
+`;
+          
+          fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
+          console.warn(`[databaseInitializer] ⚠️  Helper script created: ${scriptPath}`);
+          console.warn('[databaseInitializer] ⚠️  Run this script to enable embeddings: bash ' + scriptPath);
+          console.warn('[databaseInitializer] ⚠️  Application will continue but embeddings will not work until extension is created');
+          
+          return { success: false, error: 'Permission denied', helperScript: scriptPath };
+        }
+      } else {
+        console.error('[databaseInitializer] Error creating pgvector extension:', extError.message);
+        await client.end();
+        return { success: false, error: extError.message };
+      }
+    }
+    
+  } catch (error) {
+    console.error('[databaseInitializer] Error connecting to database:', error.message);
+    try {
+      await client.end();
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Create the application database if it doesn't exist
  */
 async function createDatabase({ host = 'localhost', port = 5432, username, password, dbName = 'vittoria_launchpad' }) {
@@ -40,6 +144,10 @@ async function createDatabase({ host = 'localhost', port = 5432, username, passw
     console.log(`[databaseInitializer] ✓ Database '${dbName}' created successfully`);
     
     await adminClient.end();
+    
+    // Create pgvector extension in the new database
+    await createPgvectorExtension({ host, port, username, password, dbName });
+    
     return { success: true, existed: false, message: 'Database created successfully' };
 
   } catch (error) {
@@ -55,6 +163,218 @@ async function createDatabase({ host = 'localhost', port = 5432, username, passw
       message: 'Failed to create database'
     };
   }
+}
+
+/**
+ * Add pgvector embedding columns to all tables
+ */
+async function addPgvectorEmbeddings(client) {
+  console.log('[databaseInitializer] Adding pgvector embedding columns to all tables...');
+
+  // Add embedding columns to intake_files
+  console.log('[databaseInitializer] Adding embeddings to intake_files...');
+  await client.query(`
+    ALTER TABLE intake_files
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'parsed_text',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to candidates
+  console.log('[databaseInitializer] Adding embeddings to candidates...');
+  await client.query(`
+    ALTER TABLE candidates
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'parsed',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true,
+    ADD COLUMN IF NOT EXISTS profile_summary_for_embedding text;
+  `);
+
+  // Add embedding columns to mandates
+  console.log('[databaseInitializer] Adding embeddings to mandates...');
+  await client.query(`
+    ALTER TABLE mandates
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'mandate',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to firms
+  console.log('[databaseInitializer] Adding embeddings to firms...');
+  await client.query(`
+    ALTER TABLE firms
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'firm_profile',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to sources
+  console.log('[databaseInitializer] Adding embeddings to sources...');
+  await client.query(`
+    ALTER TABLE sources
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'source_profile',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to finance_transactions
+  console.log('[databaseInitializer] Adding embeddings to finance_transactions...');
+  await client.query(`
+    ALTER TABLE finance_transactions
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'transaction',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to people
+  console.log('[databaseInitializer] Adding embeddings to people...');
+  await client.query(`
+    ALTER TABLE people
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'person_profile',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to employments
+  console.log('[databaseInitializer] Adding embeddings to employments...');
+  await client.query(`
+    ALTER TABLE employments
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'employment',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to documents
+  console.log('[databaseInitializer] Adding embeddings to documents...');
+  await client.query(`
+    ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'document',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to audit_log
+  console.log('[databaseInitializer] Adding embeddings to audit_log...');
+  await client.query(`
+    ALTER TABLE audit_log
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'audit',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to match_scores
+  console.log('[databaseInitializer] Adding embeddings to match_scores...');
+  await client.query(`
+    ALTER TABLE match_scores
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'match',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to teams
+  console.log('[databaseInitializer] Adding embeddings to teams...');
+  await client.query(`
+    ALTER TABLE teams
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'team',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to emails (operations module)
+  console.log('[databaseInitializer] Adding embeddings to emails...');
+  await client.query(`
+    ALTER TABLE emails
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'email_content',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to calendar_events
+  console.log('[databaseInitializer] Adding embeddings to calendar_events...');
+  await client.query(`
+    ALTER TABLE calendar_events
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'event_details',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to contacts
+  console.log('[databaseInitializer] Adding embeddings to contacts...');
+  await client.query(`
+    ALTER TABLE contacts
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'contact_profile',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add embedding columns to intake_folder_documents
+  console.log('[databaseInitializer] Adding embeddings to intake_folder_documents...');
+  await client.query(`
+    ALTER TABLE intake_folder_documents
+    ADD COLUMN IF NOT EXISTS embedding vector(384),
+    ADD COLUMN IF NOT EXISTS embedding_model varchar(255) DEFAULT 'all-MiniLM-L6-v2',
+    ADD COLUMN IF NOT EXISTS embedding_source varchar(50) DEFAULT 'document',
+    ADD COLUMN IF NOT EXISTS embedding_computed_at timestamp,
+    ADD COLUMN IF NOT EXISTS embedding_normalized boolean DEFAULT true;
+  `);
+
+  // Add category column to intake_folder_documents for file type categorization
+  console.log('[databaseInitializer] Ensuring category column exists on intake_folder_documents...');
+  await client.query(`
+    ALTER TABLE intake_folder_documents
+    ADD COLUMN IF NOT EXISTS category varchar(50) DEFAULT 'other';
+  `);
+
+  // Create ivfflat indexes for semantic search
+  console.log('[databaseInitializer] Creating ivfflat indexes for semantic search...');
+  await client.query(`CREATE INDEX IF NOT EXISTS intake_files_embedding_idx ON intake_files USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS candidates_embedding_idx ON candidates USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS mandates_embedding_idx ON mandates USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS firms_embedding_idx ON firms USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS sources_embedding_idx ON sources USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS finance_transactions_embedding_idx ON finance_transactions USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS people_embedding_idx ON people USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS employments_embedding_idx ON employments USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS documents_embedding_idx ON documents USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS audit_log_embedding_idx ON audit_log USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS match_scores_embedding_idx ON match_scores USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS teams_embedding_idx ON teams USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS emails_embedding_idx ON emails USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS calendar_events_embedding_idx ON calendar_events USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS contacts_embedding_idx ON contacts USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS intake_folder_documents_embedding_idx ON intake_folder_documents USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);`);
+
+  console.log('[databaseInitializer] ✓ All pgvector embeddings and indexes created successfully');
 }
 
 /**
@@ -81,7 +401,7 @@ async function initializeSchema({ host = 'localhost', port = 5432, username, pas
     // Read schema file
     const schemaPath = path.join(__dirname, 'schema.sql');
     let schema;
-    
+
     if (fs.existsSync(schemaPath)) {
       schema = fs.readFileSync(schemaPath, 'utf-8');
       console.log('[databaseInitializer] Loaded schema from schema.sql');
@@ -95,18 +415,17 @@ async function initializeSchema({ host = 'localhost', port = 5432, username, pas
     await client.query(schema);
     console.log('[databaseInitializer] ✓ Schema initialized successfully');
 
-    // Run migrations to add any missing columns
-    await runMigrations(client);
+    // Add pgvector embeddings to all tables
+    await addPgvectorEmbeddings(client);
 
     // Insert default settings
     await insertDefaultSettings(client);
-    
+
     // Create default admin user
     await createDefaultAdminUser(client);
-    
+
     await client.end();
     return { success: true, message: 'Schema initialized successfully' };
-
   } catch (error) {
     console.error('[databaseInitializer] Error initializing schema:', error.message);
     try {
@@ -117,190 +436,8 @@ async function initializeSchema({ host = 'localhost', port = 5432, username, pas
     return {
       success: false,
       error: error.message,
-      message: 'Failed to initialize schema'
+      message: 'Failed to initialize schema',
     };
-  }
-}
-
-/**
- * Run migrations to add missing columns to existing tables
- */
-async function runMigrations(client) {
-  console.log('[databaseInitializer] Running migrations...');
-  
-  try {
-    // Check if salt column exists in users table
-    const saltCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'users' 
-        AND column_name = 'salt'
-    `);
-    
-    if (saltCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding salt column to users table...');
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN salt VARCHAR(255) DEFAULT '' NOT NULL
-      `);
-      console.log('[databaseInitializer] ✓ Added salt column');
-    }
-    
-    // Check if is_active column exists
-    const isActiveCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'users' 
-        AND column_name = 'is_active'
-    `);
-    
-    if (isActiveCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding is_active column to users table...');
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN is_active BOOLEAN DEFAULT true
-      `);
-      console.log('[databaseInitializer] ✓ Added is_active column');
-    }
-    
-    // Check if last_login column exists
-    const lastLoginCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'users' 
-        AND column_name = 'last_login'
-    `);
-    
-    if (lastLoginCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding last_login column to users table...');
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN last_login TIMESTAMP
-      `);
-      console.log('[databaseInitializer] ✓ Added last_login column');
-    }
-    
-    console.log('[databaseInitializer] ✓ Migrations completed');
-  } catch (error) {
-    console.error('[databaseInitializer] Migration error:', error.message);
-    // Don't fail the whole setup if migrations fail
-  }
-  
-  // Add missing columns to intake_files table
-  try {
-    console.log('[databaseInitializer] Checking intake_files table columns...');
-    
-    // Check if file_path column exists
-    const filePathCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'file_path'
-    `);
-    
-    if (filePathCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding file_path column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN file_path TEXT`);
-      console.log('[databaseInitializer] ✓ Added file_path column');
-    }
-    
-    // Check if is_encrypted column exists
-    const isEncryptedCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'is_encrypted'
-    `);
-    
-    if (isEncryptedCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding is_encrypted column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN is_encrypted BOOLEAN DEFAULT false`);
-      console.log('[databaseInitializer] ✓ Added is_encrypted column');
-    }
-    
-    // Check if encryption_version column exists
-    const encryptionVersionCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'encryption_version'
-    `);
-    
-    if (encryptionVersionCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding encryption_version column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN encryption_version VARCHAR(50)`);
-      console.log('[databaseInitializer] ✓ Added encryption_version column');
-    }
-    
-    // Check if parsed_at column exists
-    const parsedAtCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'parsed_at'
-    `);
-    
-    if (parsedAtCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding parsed_at column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN parsed_at TIMESTAMP`);
-      console.log('[databaseInitializer] ✓ Added parsed_at column');
-    }
-    
-    // Check if ocr_progress column exists
-    const ocrProgressCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'ocr_progress'
-    `);
-    
-    if (ocrProgressCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding ocr_progress column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN ocr_progress INTEGER DEFAULT 0`);
-      console.log('[databaseInitializer] ✓ Added ocr_progress column');
-    }
-    
-    // Check if ocr_method column exists
-    const ocrMethodCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-        AND table_name = 'intake_files' 
-        AND column_name = 'ocr_method'
-    `);
-    
-    if (ocrMethodCheck.rows.length === 0) {
-      console.log('[databaseInitializer] Adding ocr_method column to intake_files...');
-      await client.query(`ALTER TABLE intake_files ADD COLUMN ocr_method VARCHAR(50)`);
-      console.log('[databaseInitializer] ✓ Added ocr_method column');
-    }
-    
-  } catch (error) {
-    console.error('[databaseInitializer] Error adding intake_files columns:', error.message);
-  }
-  
-  // Fix sequences for all tables (important after manual inserts or migrations)
-  try {
-    console.log('[databaseInitializer] Fixing table sequences...');
-    
-    const tables = ['users', 'firms', 'mandates', 'candidates', 'intake_files', 'match_scores', 'sources'];
-    for (const table of tables) {
-      await client.query(`
-        SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE(MAX(id), 1), true) FROM ${table}
-      `);
-    }
-    
-    console.log('[databaseInitializer] ✓ Sequences fixed');
-  } catch (error) {
-    console.error('[databaseInitializer] Error fixing sequences:', error.message);
   }
 }
 
@@ -408,7 +545,13 @@ function getInlineSchema() {
       website VARCHAR(500),
       notes_text TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'firm_profile',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Mandates table
@@ -427,7 +570,13 @@ function getInlineSchema() {
       status VARCHAR(50) DEFAULT 'OPEN',
       candidate_ids JSONB DEFAULT '[]',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'mandate',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Candidates table
@@ -445,7 +594,14 @@ function getInlineSchema() {
       status VARCHAR(50) DEFAULT 'ACTIVE',
       mandate_ids JSONB DEFAULT '[]',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'parsed',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true,
+      profile_summary_for_embedding TEXT
     );
 
     -- Intake files table
@@ -474,7 +630,13 @@ function getInlineSchema() {
       ocr_progress INTEGER DEFAULT 0,
       ocr_method VARCHAR(50),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'parsed_text',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Match scores table
@@ -485,8 +647,166 @@ function getInlineSchema() {
       final_score DECIMAL(5, 2) NOT NULL CHECK (final_score >= 0 AND final_score <= 100),
       dimension_scores JSONB NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'match',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
+
+    -- ============================================
+    -- OPERATIONS MODULE TABLES
+    -- ============================================
+
+    -- Emails table
+    CREATE TABLE IF NOT EXISTS emails (
+      id SERIAL PRIMARY KEY,
+      mailbox VARCHAR(255) NOT NULL,
+      subject TEXT NOT NULL,
+      sender VARCHAR(255) NOT NULL,
+      recipient TEXT NOT NULL,
+      body TEXT,
+      status VARCHAR(50) DEFAULT 'unread',
+      attachments JSONB DEFAULT '[]',
+      date TIMESTAMP NOT NULL,
+      thread_id VARCHAR(255),
+      in_reply_to VARCHAR(255),
+      labels JSONB DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'email_content',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true,
+      CHECK (status IN ('unread', 'read', 'archived', 'deleted'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_emails_mailbox ON emails(mailbox);
+    CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status);
+    CREATE INDEX IF NOT EXISTS idx_emails_date ON emails(date DESC);
+    CREATE INDEX IF NOT EXISTS idx_emails_thread_id ON emails(thread_id);
+    CREATE INDEX IF NOT EXISTS idx_emails_embedding ON emails USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+
+    -- Calendar events table
+    CREATE TABLE IF NOT EXISTS calendar_events (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      event_date TIMESTAMP NOT NULL,
+      attendees JSONB DEFAULT '[]',
+      description TEXT,
+      location VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'scheduled',
+      meeting_type VARCHAR(50),
+      duration_minutes INTEGER,
+      organizer VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'event_details',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true,
+      CHECK (status IN ('scheduled', 'completed', 'cancelled'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(event_date);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_status ON calendar_events(status);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_embedding ON calendar_events USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+
+    -- Intake folders table
+    CREATE TABLE IF NOT EXISTS intake_folders (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      parent_id INTEGER REFERENCES intake_folders(id) ON DELETE CASCADE,
+      folder_path TEXT NOT NULL,
+      source VARCHAR(50) NOT NULL,
+      sync_status VARCHAR(50) DEFAULT 'active',
+      last_sync TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CHECK (source IN ('onedrive', 'sharepoint', 'local')),
+      CHECK (sync_status IN ('active', 'paused', 'error'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_intake_folders_parent_id ON intake_folders(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_intake_folders_source ON intake_folders(source);
+
+    -- Intake folder documents table
+    CREATE TABLE IF NOT EXISTS intake_folder_documents (
+      id SERIAL PRIMARY KEY,
+      folder_id INTEGER,
+      file_name VARCHAR(500) NOT NULL,
+      file_path TEXT NOT NULL,
+      file_size BIGINT,
+      file_type VARCHAR(100),
+      category VARCHAR(50) DEFAULT 'other',
+      status VARCHAR(50) DEFAULT 'pending',
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      processed_at TIMESTAMP,
+      candidate_id INTEGER REFERENCES candidates(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CHECK (status IN ('pending', 'processed', 'error', 'duplicate'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_intake_folder_documents_folder_id ON intake_folder_documents(folder_id);
+    CREATE INDEX IF NOT EXISTS idx_intake_folder_documents_status ON intake_folder_documents(status);
+    CREATE INDEX IF NOT EXISTS idx_intake_folder_documents_candidate_id ON intake_folder_documents(candidate_id);
+
+    -- Operations mailboxes table
+    CREATE TABLE IF NOT EXISTS operations_mailboxes (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      display_name VARCHAR(255),
+      access_enabled BOOLEAN DEFAULT true,
+      imap_settings JSONB,
+      smtp_settings JSONB,
+      sync_status VARCHAR(50) DEFAULT 'active',
+      last_sync TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CHECK (sync_status IN ('active', 'paused', 'error'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_operations_mailboxes_email ON operations_mailboxes(email);
+    CREATE INDEX IF NOT EXISTS idx_operations_mailboxes_access_enabled ON operations_mailboxes(access_enabled);
+
+    -- Operations integrations table
+    CREATE TABLE IF NOT EXISTS operations_integrations (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) UNIQUE NOT NULL,
+      enabled BOOLEAN DEFAULT false,
+      configuration JSONB,
+      status VARCHAR(50) DEFAULT 'inactive',
+      last_connected TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CHECK (status IN ('active', 'inactive', 'error'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_operations_integrations_name ON operations_integrations(name);
+    CREATE INDEX IF NOT EXISTS idx_operations_integrations_enabled ON operations_integrations(enabled);
+
+    -- Operations preferences table
+    CREATE TABLE IF NOT EXISTS operations_preferences (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      preferences JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_operations_preferences_user_id ON operations_preferences(user_id);
+
+    -- ============================================
+    -- END OPERATIONS MODULE TABLES
+    -- ============================================
 
     -- Sources table
     CREATE TABLE IF NOT EXISTS sources (
@@ -498,7 +818,13 @@ function getInlineSchema() {
       sectors JSONB NOT NULL DEFAULT '[]',
       geographies JSONB NOT NULL DEFAULT '[]',
       seniority_level VARCHAR(64) NOT NULL,
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT NOW(),
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'source_profile',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Teams table
@@ -508,7 +834,13 @@ function getInlineSchema() {
       firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
       description TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'team',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- People table
@@ -523,7 +855,13 @@ function getInlineSchema() {
       role VARCHAR(255),
       linkedin_url VARCHAR(500),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'person_profile',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Employments table
@@ -535,9 +873,15 @@ function getInlineSchema() {
       job_title VARCHAR(255),
       start_date TIMESTAMP,
       end_date TIMESTAMP,
-      status VARCHAR(50) DEFAULT 'Active',
+      is_current BOOLEAN DEFAULT true,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'employment',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Documents table
@@ -558,7 +902,13 @@ function getInlineSchema() {
       candidate_id INTEGER REFERENCES candidates(id) ON DELETE CASCADE,
       is_confidential BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'document',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Finance Transactions table
@@ -581,7 +931,13 @@ function getInlineSchema() {
       notes TEXT,
       created_by INTEGER REFERENCES people(id) ON DELETE SET NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'transaction',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Audit Log table
@@ -594,7 +950,63 @@ function getInlineSchema() {
       changes JSONB,
       ip_address VARCHAR(45),
       user_agent TEXT,
-      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Vector embedding columns
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'audit',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
+    );
+
+    -- Contacts table (Microsoft 365 compatible structure)
+    CREATE TABLE IF NOT EXISTS contacts (
+      id SERIAL PRIMARY KEY,
+      -- Basic Information
+      display_name VARCHAR(255) NOT NULL,
+      given_name VARCHAR(100),
+      surname VARCHAR(100),
+      middle_name VARCHAR(100),
+      title VARCHAR(100),
+      company_name VARCHAR(255),
+      department VARCHAR(100),
+      job_title VARCHAR(150),
+      
+      -- Contact Information
+      email_address VARCHAR(255),
+      business_phones TEXT[], -- Array for multiple phone numbers
+      mobile_phone VARCHAR(50),
+      home_phones TEXT[],
+      
+      -- Address Information
+      business_address JSONB, -- {street, city, state, postalCode, countryOrRegion}
+      home_address JSONB,
+      other_address JSONB,
+      
+      -- Additional Details
+      birthday DATE,
+      personal_notes TEXT,
+      categories TEXT[], -- Tags/categories for organization
+      
+      -- Microsoft 365 specific fields
+      microsoft_id VARCHAR(255) UNIQUE, -- Graph API ID when synced
+      change_key VARCHAR(255), -- For sync tracking
+      
+      -- Metadata
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_synced_at TIMESTAMP,
+      is_synced BOOLEAN DEFAULT FALSE,
+      
+      -- Search optimization
+      search_vector tsvector,
+      
+      -- Vector embedding for semantic search
+      embedding vector(384),
+      embedding_model VARCHAR(255) DEFAULT 'all-MiniLM-L6-v2',
+      embedding_source VARCHAR(50) DEFAULT 'contact_profile',
+      embedding_computed_at TIMESTAMP,
+      embedding_normalized BOOLEAN DEFAULT true
     );
 
     -- Indexes
@@ -629,6 +1041,28 @@ function getInlineSchema() {
     CREATE INDEX IF NOT EXISTS idx_audit_log_performed_by ON audit_log(performed_by);
     CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+    CREATE INDEX IF NOT EXISTS idx_contacts_display_name ON contacts(display_name);
+    CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email_address);
+    CREATE INDEX IF NOT EXISTS idx_contacts_company ON contacts(company_name);
+    CREATE INDEX IF NOT EXISTS idx_contacts_microsoft_id ON contacts(microsoft_id);
+    CREATE INDEX IF NOT EXISTS idx_contacts_search_vector ON contacts USING GIN(search_vector);
+    CREATE INDEX IF NOT EXISTS idx_contacts_embedding ON contacts USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    
+    -- Vector embedding indexes for semantic search
+    CREATE INDEX IF NOT EXISTS idx_intake_files_embedding ON intake_files USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+    CREATE INDEX IF NOT EXISTS idx_candidates_embedding ON candidates USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_mandates_embedding ON mandates USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_firms_embedding ON firms USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_sources_embedding ON sources USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_people_embedding ON people USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_teams_embedding ON teams USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_employments_embedding ON employments USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_documents_embedding ON documents USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_finance_transactions_embedding ON finance_transactions USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_embedding ON audit_log USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_match_scores_embedding ON match_scores USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
+    CREATE INDEX IF NOT EXISTS idx_emails_embedding ON emails USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_embedding ON calendar_events USING ivfflat (embedding vector_l2_ops) WITH (lists = 50);
 
     -- Updated_at trigger function
     CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -687,6 +1121,47 @@ function getInlineSchema() {
     DROP TRIGGER IF EXISTS update_finance_transactions_updated_at ON finance_transactions;
     CREATE TRIGGER update_finance_transactions_updated_at BEFORE UPDATE ON finance_transactions
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    -- Operations module triggers
+    DROP TRIGGER IF EXISTS update_emails_updated_at ON emails;
+    CREATE TRIGGER update_emails_updated_at BEFORE UPDATE ON emails
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS update_calendar_events_updated_at ON calendar_events;
+    CREATE TRIGGER update_calendar_events_updated_at BEFORE UPDATE ON calendar_events
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS update_intake_folders_updated_at ON intake_folders;
+    CREATE TRIGGER update_intake_folders_updated_at BEFORE UPDATE ON intake_folders
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS update_intake_folder_documents_updated_at ON intake_folder_documents;
+    CREATE TRIGGER update_intake_folder_documents_updated_at BEFORE UPDATE ON intake_folder_documents
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS update_operations_mailboxes_updated_at ON operations_mailboxes;
+    CREATE TRIGGER update_operations_mailboxes_updated_at BEFORE UPDATE ON operations_mailboxes
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS update_operations_integrations_updated_at ON operations_integrations;
+    CREATE TRIGGER update_operations_integrations_updated_at BEFORE UPDATE ON operations_integrations
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS update_operations_preferences_updated_at ON operations_preferences;
+    CREATE TRIGGER update_operations_preferences_updated_at BEFORE UPDATE ON operations_preferences
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS update_contacts_updated_at ON contacts;
+    CREATE TRIGGER update_contacts_updated_at BEFORE UPDATE ON contacts
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    -- Search vector update trigger for contacts
+    DROP TRIGGER IF EXISTS update_contacts_search_vector ON contacts;
+    CREATE TRIGGER update_contacts_search_vector BEFORE INSERT OR UPDATE ON contacts
+      FOR EACH ROW EXECUTE FUNCTION tsvector_update_trigger(
+        search_vector, 'pg_catalog.english',
+        display_name, given_name, surname, email_address, company_name, job_title
+      );
 
     -- ============================================
     -- AUDIT LOGGING TRIGGERS
@@ -782,6 +1257,27 @@ function getInlineSchema() {
     DROP TRIGGER IF EXISTS audit_finance_transactions_trigger ON finance_transactions;
     CREATE TRIGGER audit_finance_transactions_trigger
       AFTER INSERT OR UPDATE OR DELETE ON finance_transactions
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    -- Operations module audit triggers
+    DROP TRIGGER IF EXISTS audit_emails_trigger ON emails;
+    CREATE TRIGGER audit_emails_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON emails
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    DROP TRIGGER IF EXISTS audit_calendar_events_trigger ON calendar_events;
+    CREATE TRIGGER audit_calendar_events_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON calendar_events
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    DROP TRIGGER IF EXISTS audit_intake_folders_trigger ON intake_folders;
+    CREATE TRIGGER audit_intake_folders_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON intake_folders
+      FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+    
+    DROP TRIGGER IF EXISTS audit_intake_folder_documents_trigger ON intake_folder_documents;
+    CREATE TRIGGER audit_intake_folder_documents_trigger
+      AFTER INSERT OR UPDATE OR DELETE ON intake_folder_documents
       FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
     
     -- Users audit trigger (for security)
@@ -1044,6 +1540,206 @@ async function ensureAllTablesExist() {
       `);
       console.log('[databaseInitializer] ✓ Finance transactions table created');
     }
+
+    // Ensure Operations module tables exist
+    const emailsTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'emails'
+    `);
+
+    if (emailsTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating emails table...');
+      await db.query(`
+        CREATE TABLE emails (
+          id SERIAL PRIMARY KEY,
+          mailbox VARCHAR(255) NOT NULL,
+          subject TEXT NOT NULL,
+          sender VARCHAR(255) NOT NULL,
+          recipient TEXT NOT NULL,
+          body TEXT,
+          status VARCHAR(50) DEFAULT 'unread',
+          attachments JSONB DEFAULT '[]',
+          date TIMESTAMP NOT NULL,
+          thread_id VARCHAR(255),
+          in_reply_to VARCHAR(255),
+          labels JSONB DEFAULT '[]',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CHECK (status IN ('unread', 'read', 'archived', 'deleted'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_emails_mailbox ON emails(mailbox);
+        CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status);
+        CREATE INDEX IF NOT EXISTS idx_emails_date ON emails(date DESC);
+        CREATE INDEX IF NOT EXISTS idx_emails_thread_id ON emails(thread_id);
+      `);
+      console.log('[databaseInitializer] ✓ Emails table created');
+    }
+
+    const calendarTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'calendar_events'
+    `);
+
+    if (calendarTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating calendar_events table...');
+      await db.query(`
+        CREATE TABLE calendar_events (
+          id SERIAL PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          event_date TIMESTAMP NOT NULL,
+          attendees JSONB DEFAULT '[]',
+          description TEXT,
+          location VARCHAR(255),
+          status VARCHAR(50) DEFAULT 'scheduled',
+          meeting_type VARCHAR(50),
+          duration_minutes INTEGER,
+          organizer VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CHECK (status IN ('scheduled', 'completed', 'cancelled'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(event_date);
+        CREATE INDEX IF NOT EXISTS idx_calendar_events_status ON calendar_events(status);
+      `);
+      console.log('[databaseInitializer] ✓ Calendar events table created');
+    }
+
+    const intakeFoldersTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'intake_folders'
+    `);
+
+    if (intakeFoldersTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating intake_folders table...');
+      await db.query(`
+        CREATE TABLE intake_folders (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          parent_id INTEGER REFERENCES intake_folders(id) ON DELETE CASCADE,
+          folder_path TEXT NOT NULL,
+          source VARCHAR(50) NOT NULL,
+          sync_status VARCHAR(50) DEFAULT 'active',
+          last_sync TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CHECK (source IN ('onedrive', 'sharepoint', 'local')),
+          CHECK (sync_status IN ('active', 'paused', 'error'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_intake_folders_parent_id ON intake_folders(parent_id);
+        CREATE INDEX IF NOT EXISTS idx_intake_folders_source ON intake_folders(source);
+      `);
+      console.log('[databaseInitializer] ✓ Intake folders table created');
+    }
+
+    const intakeDocsTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'intake_folder_documents'
+    `);
+
+    if (intakeDocsTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating intake_folder_documents table...');
+      await db.query(`
+        CREATE TABLE intake_folder_documents (
+          id SERIAL PRIMARY KEY,
+          folder_id INTEGER NOT NULL REFERENCES intake_folders(id) ON DELETE CASCADE,
+          file_name VARCHAR(500) NOT NULL,
+          file_path TEXT NOT NULL,
+          file_size BIGINT,
+          file_type VARCHAR(100),
+          status VARCHAR(50) DEFAULT 'pending',
+          uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          processed_at TIMESTAMP,
+          candidate_id INTEGER REFERENCES candidates(id) ON DELETE SET NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CHECK (status IN ('pending', 'processed', 'error', 'duplicate'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_intake_folder_documents_folder_id ON intake_folder_documents(folder_id);
+        CREATE INDEX IF NOT EXISTS idx_intake_folder_documents_status ON intake_folder_documents(status);
+        CREATE INDEX IF NOT EXISTS idx_intake_folder_documents_candidate_id ON intake_folder_documents(candidate_id);
+      `);
+      console.log('[databaseInitializer] ✓ Intake folder documents table created');
+    }
+
+    const mailboxesTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'operations_mailboxes'
+    `);
+
+    if (mailboxesTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating operations_mailboxes table...');
+      await db.query(`
+        CREATE TABLE operations_mailboxes (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          display_name VARCHAR(255),
+          access_enabled BOOLEAN DEFAULT true,
+          imap_settings JSONB,
+          smtp_settings JSONB,
+          sync_status VARCHAR(50) DEFAULT 'active',
+          last_sync TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CHECK (sync_status IN ('active', 'paused', 'error'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_operations_mailboxes_email ON operations_mailboxes(email);
+        CREATE INDEX IF NOT EXISTS idx_operations_mailboxes_access_enabled ON operations_mailboxes(access_enabled);
+      `);
+      console.log('[databaseInitializer] ✓ Operations mailboxes table created');
+    }
+
+    const integrationsTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'operations_integrations'
+    `);
+
+    if (integrationsTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating operations_integrations table...');
+      await db.query(`
+        CREATE TABLE operations_integrations (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(100) UNIQUE NOT NULL,
+          enabled BOOLEAN DEFAULT false,
+          configuration JSONB,
+          status VARCHAR(50) DEFAULT 'inactive',
+          last_connected TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CHECK (status IN ('active', 'inactive', 'error'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_operations_integrations_name ON operations_integrations(name);
+        CREATE INDEX IF NOT EXISTS idx_operations_integrations_enabled ON operations_integrations(enabled);
+      `);
+      console.log('[databaseInitializer] ✓ Operations integrations table created');
+    }
+
+    const prefsTableCheck = await db.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'operations_preferences'
+    `);
+
+    if (prefsTableCheck.rows.length === 0) {
+      console.log('[databaseInitializer] Creating operations_preferences table...');
+      await db.query(`
+        CREATE TABLE operations_preferences (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          preferences JSONB NOT NULL DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_operations_preferences_user_id ON operations_preferences(user_id);
+      `);
+      console.log('[databaseInitializer] ✓ Operations preferences table created');
+    }
     
     // Check if audit_log table exists
     const auditTableCheck = await db.query(`
@@ -1167,14 +1863,51 @@ async function ensureAllTablesExist() {
     `);
     console.log('[databaseInitializer] ✓ Audit triggers configured');
     
-    // Run migrations to add any missing columns
-    console.log('[databaseInitializer] Running migrations to add missing columns...');
-    const client = await db.getClient();
+    // Ensure pgvector extension exists before running migrations
+    console.log('[databaseInitializer] Ensuring pgvector extension exists...');
+    const { Client } = require('pg');
+    const credentials = db.getCredentials ? db.getCredentials() : null;
+    
+    if (credentials) {
+      const extResult = await createPgvectorExtension({
+        host: credentials.host || 'localhost',
+        port: credentials.port || 5432,
+        username: credentials.user || 'postgres',
+        password: credentials.password || '',
+        dbName: credentials.database || 'vittoria_launchpad'
+      });
+      
+      if (!extResult.success && extResult.helperScript) {
+        console.warn('[databaseInitializer] ⚠️  pgvector extension could not be created automatically');
+        console.warn(`[databaseInitializer] ⚠️  Helper script available: ${extResult.helperScript}`);
+        console.warn('[databaseInitializer] ⚠️  Run: bash ' + extResult.helperScript);
+      }
+    }
+    
+    // CRITICAL: Ensure all tables have embedding columns
+    console.log('[databaseInitializer] Ensuring all tables have embedding columns...');
     try {
-      await runMigrations(client);
-      console.log('[databaseInitializer] ✓ Migrations completed');
-    } finally {
-      client.release();
+      const client = await db.getClient();
+      try {
+        await addPgvectorEmbeddings(client);
+        console.log('[databaseInitializer] ✓ Embedding columns verified/added');
+      } finally {
+        client.release();
+      }
+    } catch (embError) {
+      console.error('[databaseInitializer] Error adding embedding columns:', embError.message);
+      // Continue anyway - embeddings are optional feature
+    }
+    
+    // Run migrations to add any missing columns and pgvector support
+    console.log('[databaseInitializer] Running migrations to add pgvector embeddings...');
+    try {
+      const migrationRunner = require('../services/migrationRunner.cjs');
+      const result = await migrationRunner.runAllMigrations();
+      console.log(`[databaseInitializer] ✓ Migrations completed: ${result.applied.length} applied, ${result.skipped.length} skipped`);
+    } catch (error) {
+      console.error('[databaseInitializer] Warning: Migration error (continuing):', error.message);
+      // Don't fail if migrations have issues - continue with app startup
     }
     
     console.log('[databaseInitializer] ✓ All tables verified');

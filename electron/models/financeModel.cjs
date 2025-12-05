@@ -1,5 +1,6 @@
 // electron/models/financeModel.cjs
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
 
 const FinanceModel = {
   /**
@@ -128,7 +129,35 @@ const FinanceModel = {
         data.created_by || null
       ]
     );
-    return result.rows[0].id;
+    const transactionId = result.rows[0].id;
+
+    // Generate and persist embedding
+    try {
+      const transactionSummary = [
+        data.transaction_type || '',
+        data.category || '',
+        data.currency || 'GBP',
+        `${data.amount}`,
+        data.description || '',
+        data.invoice_number || '',
+        data.payment_status || '',
+        data.notes || '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      await embeddingClient.generateAndPersistEmbedding(
+        'finance_transactions',
+        transactionId,
+        transactionSummary,
+        { source: 'transaction' }
+      );
+      console.log(`[financeModel] ✅ Generated embedding for transaction ${transactionId}`);
+    } catch (error) {
+      console.error(`[financeModel] ⚠️ Failed to generate embedding for transaction ${transactionId}:`, error.message);
+    }
+
+    return transactionId;
   },
 
   /**
@@ -206,6 +235,15 @@ const FinanceModel = {
    * @returns {Promise<void>}
    */
   async delete(id) {
+    try {
+      const vectorStore = require('../services/vectorStore.cjs');
+      // Delete embedding first
+      await vectorStore.deleteEmbedding('finance_transactions', id);
+      console.log(`✅ Deleted embedding for finance transaction ${id}`);
+    } catch (error) {
+      console.error(`⚠️ Failed to delete embedding:`, error.message);
+    }
+
     await db.query('DELETE FROM finance_transactions WHERE id = $1', [id]);
   },
 

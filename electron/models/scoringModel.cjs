@@ -2,6 +2,7 @@
 // POSTGRESQL VERSION
 // ============================================================
 const { query, getClient } = require("../db/pgConnection.cjs");
+const embeddingClient = require("../services/embeddingClient.cjs");
 const fs = require("fs");
 const path = require("path");
 
@@ -919,7 +920,31 @@ async function saveMatchScore(candidateId, mandateId, finalScore, dimensionScore
     [candidateId, mandateId, finalScore, JSON.stringify(dimensionScores)]
   );
 
-  return result.rows[0].id;
+  const matchScoreId = result.rows[0].id;
+
+  // Generate and persist embedding
+  try {
+    const scoreSummary = [
+      `Candidate: ${candidateId}`,
+      `Mandate: ${mandateId}`,
+      `Score: ${finalScore}`,
+      `Dimensions: ${JSON.stringify(dimensionScores).substring(0, 100)}`,
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    await embeddingClient.generateAndPersistEmbedding(
+      'match_scores',
+      matchScoreId,
+      scoreSummary,
+      { source: 'match_score' }
+    );
+    console.log(`[scoringModel] ✅ Generated embedding for match score ${matchScoreId}`);
+  } catch (error) {
+    console.error(`[scoringModel] ⚠️ Failed to generate embedding for match score ${matchScoreId}:`, error.message);
+  }
+
+  return matchScoreId;
 }
 
 /**

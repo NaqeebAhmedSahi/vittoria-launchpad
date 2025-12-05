@@ -49,13 +49,13 @@ interface MandateFormDialogProps {
 }
 
 export function MandateFormDialog({
-                                    open,
-                                    onOpenChange,
-                                    onSubmit,
-                                    mode = "create",
-                                    initialData,
-                                    firms,
-                                  }: MandateFormDialogProps) {
+  open,
+  onOpenChange,
+  onSubmit,
+  mode = "create",
+  initialData,
+  firms,
+}: MandateFormDialogProps) {
   const [name, setName] = useState("");
   const [firmId, setFirmId] = useState<string>("");
   const [location, setLocation] = useState("");
@@ -115,18 +115,24 @@ export function MandateFormDialog({
     const nextErrors: Record<string, string> = {};
 
     if (!name.trim()) nextErrors.name = "Mandate name is required.";
-    if (safeFirms.length > 0 && !firmId) nextErrors.firm_id = "Client firm is required.";
+    if (safeFirms.length > 0 && !firmId)
+      nextErrors.firm_id = "Client firm is required.";
     if (!location.trim()) nextErrors.location = "Location is required.";
-    if (!primarySector.trim()) nextErrors.primary_sector = "Primary sector is required.";
-    if (!sectors.length) nextErrors.sectors = "At least one sector is required.";
-    if (!functionsVal.length) nextErrors.functions = "At least one function is required.";
-    if (!assetClasses.length) nextErrors.asset_classes = "At least one asset class is required.";
-    if (!regions.length) nextErrors.regions = "At least one region is required.";
-    if (!seniorityMin.trim()) nextErrors.seniority_min = "Seniority min is required.";
-    if (!seniorityMax.trim()) nextErrors.seniority_max = "Seniority max is required.";
+    if (!primarySector.trim())
+      nextErrors.primary_sector = "Primary sector is required.";
+    if (!sectors.length)
+      nextErrors.sectors = "At least one sector is required.";
+    if (!functionsVal.length)
+      nextErrors.functions = "At least one function is required.";
+    if (!assetClasses.length)
+      nextErrors.asset_classes = "At least one asset class is required.";
+    if (!regions.length)
+      nextErrors.regions = "At least one region is required.";
+    if (!seniorityMin.trim())
+      nextErrors.seniority_min = "Seniority min is required.";
+    if (!seniorityMax.trim())
+      nextErrors.seniority_max = "Seniority max is required.";
     if (!status) nextErrors.status = "Status is required.";
-    // if you want rawBrief required too, uncomment:
-    // if (!rawBrief.trim()) nextErrors.raw_brief = "Scope / notes are required.";
 
     setErrors(nextErrors);
     return nextErrors;
@@ -172,12 +178,12 @@ export function MandateFormDialog({
         onOpenChange(value);
       }}
     >
-      <DialogContent className="max-w-3xl h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto pt-6 pb-6">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           {/* Row 1: Mandate name + status */}
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2 col-span-2">
@@ -195,10 +201,7 @@ export function MandateFormDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="status">Status *</Label>
-              <Select
-                value={status}
-                onValueChange={(val) => setStatus(val)}
-              >
+              <Select value={status} onValueChange={(val) => setStatus(val)}>
                 <SelectTrigger id="status">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
@@ -243,10 +246,7 @@ export function MandateFormDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {safeFirms.map((firm) => (
-                        <SelectItem
-                          key={firm.id}
-                          value={String(firm.id)}
-                        >
+                        <SelectItem key={firm.id} value={String(firm.id)}>
                           {firm.name}
                         </SelectItem>
                       ))}
@@ -386,7 +386,7 @@ export function MandateFormDialog({
           </div>
           */}
 
-          <DialogFooter>
+          <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="outline"
@@ -403,3 +403,4 @@ export function MandateFormDialog({
     </Dialog>
   );
 }
+

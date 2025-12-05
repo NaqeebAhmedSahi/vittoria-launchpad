@@ -38,6 +38,11 @@ const { registerEmploymentIpcHandlers } = require("./controllers/employmentContr
 const { registerDocumentIpcHandlers } = require("./controllers/documentController.cjs");
 const { registerFinanceIpcHandlers } = require("./controllers/financeController.cjs");
 const { registerAuditIpcHandlers } = require("./controllers/auditController.cjs");
+const { setupEmailHandlers } = require("./controllers/emailController.cjs");
+const { setupCalendarHandlers } = require("./controllers/calendarController.cjs");
+const { setupIntakeFolderHandlers } = require("./controllers/intakeFolderController.cjs");
+const { setupOperationsSettingsHandlers } = require("./controllers/operationsSettingsController.cjs");
+const { registerContactHandlers } = require("./controllers/contactController.cjs");
 const { registerSetupIpcHandlers } = require("./setup/setupController.cjs");
 const { ensureAllTablesExist } = require("./setup/databaseInitializer.cjs");
 
@@ -151,7 +156,22 @@ app.whenReady().then(async () => {
   console.log('[main.cjs] Step 14: Registering Audit IPC handlers...');
   registerAuditIpcHandlers();
   
-  console.log('[main.cjs] Step 15: Creating main window...');
+  console.log('[main.cjs] Step 15: Registering Email IPC handlers...');
+  setupEmailHandlers();
+  
+  console.log('[main.cjs] Step 16: Registering Calendar IPC handlers...');
+  setupCalendarHandlers();
+  
+  console.log('[main.cjs] Step 17: Registering Intake Folder IPC handlers...');
+  setupIntakeFolderHandlers();
+  
+  console.log('[main.cjs] Step 18: Registering Operations Settings IPC handlers...');
+  setupOperationsSettingsHandlers();
+  
+  console.log('[main.cjs] Step 19: Registering Contact IPC handlers...');
+  registerContactHandlers();
+  
+  console.log('[main.cjs] Step 20: Creating main window...');
   createWindow();
   
   console.log('[main.cjs] ===== INITIALIZATION COMPLETE =====');

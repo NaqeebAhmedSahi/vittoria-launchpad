@@ -122,6 +122,13 @@ function hasCredentials() {
   return credentials !== null;
 }
 
+/**
+ * Get current credentials (for internal use)
+ */
+function getCredentials() {
+  return credentials;
+}
+
 module.exports = {
   setCredentials,
   initPgPool,
@@ -129,5 +136,6 @@ module.exports = {
   closePgPool,
   query,
   getClient,
-  hasCredentials
+  hasCredentials,
+  getCredentials
 };

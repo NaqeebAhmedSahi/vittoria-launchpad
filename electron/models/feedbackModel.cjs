@@ -2,6 +2,7 @@
 // sourceId, candidateId, mandateId, strength, comment, created_at
 
 const db = require('../db/pgConnection.cjs');
+const embeddingClient = require('../services/embeddingClient.cjs');
 
 const FeedbackModel = {
   async list({ mandateId, candidateId }) {

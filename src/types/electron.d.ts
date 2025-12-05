@@ -352,7 +352,142 @@ declare global {
         getRecentActivity(limit?: number): Promise<{ success: boolean; activity?: AuditLog[]; error?: string }>;
         deleteOldLogs(beforeDate: string): Promise<{ success: boolean; deletedCount?: number; error?: string }>;
       };
+      emails: {
+        getByMailbox(mailbox: string): Promise<Email[]>;
+        create(emailData: Partial<Email>): Promise<Email>;
+        updateStatus(id: number, status: string): Promise<void>;
+        delete(id: number): Promise<void>;
+        getUnreadCount(mailbox: string): Promise<number>;
+        search(query: string): Promise<Email[]>;
+      };
+      calendar: {
+        getAll(): Promise<CalendarEvent[]>;
+        getByDateRange(startDate: string, endDate: string): Promise<CalendarEvent[]>;
+        create(eventData: Partial<CalendarEvent>): Promise<CalendarEvent>;
+        update(id: number, eventData: Partial<CalendarEvent>): Promise<void>;
+        delete(id: number): Promise<void>;
+        getById(id: number): Promise<CalendarEvent | null>;
+      };
+      intakeFolders: {
+  getAllFolders(): Promise<IntakeFolder[]>;
+  getDocumentsByFolder(folderId: number): Promise<IntakeDocument[]>;
+        createFolder(folderData: Partial<IntakeFolder>): Promise<IntakeFolder>;
+        createDocument(documentData: Partial<IntakeDocument>): Promise<IntakeDocument>;
+  uploadFiles(folderId: number): Promise<{ success: boolean; uploaded: IntakeDocument[] }>;
+  uploadFolder(folderId: number): Promise<{ success: boolean; uploaded: IntakeDocument[] }>;
+  uploadFilesAsync(folderId: number): Promise<{ success: boolean; uploaded: IntakeDocument[] }>;
+  uploadFolderAsync(folderId: number): Promise<{ success: boolean; uploaded: IntakeDocument[] }>;
+  uploadPathsAsync(folderId: number, paths: string[]): Promise<{ success: boolean; uploaded: IntakeDocument[] }>;
+  onUploadProgress(cb: (data: { folderId: number; filename: string; completed: number; total: number; percent: number }) => void): () => void;
+  onUploadComplete(cb: (data: { folderId: number; uploaded: IntakeDocument[] }) => void): () => void;
+        updateDocumentStatus(id: number, status: string): Promise<void>;
+        deleteDocument(id: number): Promise<void>;
+        deleteFolder(id: number): Promise<void>;
+        syncFolder(id: number): Promise<void>;
+        getUnprocessedCount(): Promise<number>;
+      };
+      operationsSettings: {
+        getAllMailboxes(): Promise<OperationsMailbox[]>;
+        updateMailboxAccess(email: string, access: boolean): Promise<void>;
+        getAllIntegrations(): Promise<OperationsIntegration[]>;
+        updateIntegrationStatus(name: string, status: boolean): Promise<void>;
+        getUserPreferences(): Promise<OperationsPreferences | null>;
+        updateUserPreferences(preferences: any): Promise<void>;
+      };
     };
+  }
+
+  interface Email {
+    id: number;
+    mailbox: string;
+    subject: string;
+    sender: string;
+    recipient: string;
+    body?: string;
+    status: "read" | "unread" | "archived" | "deleted";
+    attachments?: any[];
+    date: string;
+    thread_id?: string;
+    in_reply_to?: string;
+    labels?: string[];
+    created_at: string;
+    updated_at: string;
+  }
+
+  interface CalendarEvent {
+    id: number;
+    title: string;
+    event_date: string;
+    attendees: string[];
+    description?: string;
+    location?: string;
+    status?: "scheduled" | "completed" | "cancelled";
+    meeting_type?: string;
+    duration_minutes?: number;
+    organizer?: string;
+    created_at: string;
+    updated_at: string;
+  }
+
+  interface IntakeFolder {
+    id: number;
+    name: string;
+    parent_id?: number;
+    folder_path: string;
+    source: "onedrive" | "sharepoint" | "local";
+    sync_status: "active" | "paused" | "error";
+    last_sync?: string;
+    created_at: string;
+    updated_at: string;
+    document_count?: number;
+  }
+
+  interface IntakeDocument {
+    id: number;
+    folder_id: number;
+    file_name: string;
+    file_path: string;
+    file_size?: number;
+    file_type?: string;
+    status: "pending" | "processed" | "error" | "duplicate";
+    category?: string;
+    uploaded_at: string;
+    processed_at?: string;
+    candidate_id?: number;
+    created_at: string;
+    updated_at: string;
+  }
+
+  interface OperationsMailbox {
+    id: number;
+    email: string;
+    display_name?: string;
+    access_enabled: boolean;
+    imap_settings?: any;
+    smtp_settings?: any;
+    sync_status: "active" | "paused" | "error";
+    last_sync?: string;
+    created_at: string;
+    updated_at: string;
+  }
+
+  interface OperationsIntegration {
+    id: number;
+    name: string;
+    enabled: boolean;
+    configuration?: any;
+    status: "active" | "inactive" | "error";
+    last_connected?: string;
+    created_at: string;
+    updated_at: string;
+  }
+
+  interface OperationsPreferences {
+    id: number;
+    user_id?: number;
+    preferences: any;
+    created_at: string;
+    updated_at: string;
   }
 
   interface FinanceTransaction {

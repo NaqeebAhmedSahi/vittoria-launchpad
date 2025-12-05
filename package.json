@@ -23,13 +23,12 @@
     "electron:build:mac": "npm run check-build-assets && npm run build && electron-builder --mac",
     "electron:build:linux": "npm run check-build-assets && npm run build && electron-builder --linux",
     "electron:build:all": "npm run check-build-assets && npm run build && electron-builder -mwl",
-    "check-build-assets": "node scripts/check-build-assets.cjs"
-  ,
+    "check-build-assets": "node scripts/check-build-assets.cjs",
     "generate-icons": "node scripts/generate-icons.cjs"
   },
   "build": {
     "appId": "com.vittoria.launchpad",
-  "productName": "BWS Vittoria",
+    "productName": "BWS Vittoria",
     "directories": {
       "output": "release"
     },
@@ -79,6 +78,7 @@
     "@langchain/core": "^1.0.5",
     "@langchain/google-genai": "^1.0.1",
     "@langchain/openai": "^1.1.1",
+    "@lmstudio/sdk": "^1.5.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",

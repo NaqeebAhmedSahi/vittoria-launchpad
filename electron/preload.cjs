@@ -38,7 +38,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   ping: () => "pong",
 
-    // 🔹 Setup / PostgreSQL configuration
+  // 🔹 Setup / PostgreSQL configuration
   setup: {
     // Check if full app setup is completed (based on settings)
     isCompleted: () => ipcRenderer.invoke("setup:isCompleted"),
@@ -78,18 +78,18 @@ contextBridge.exposeInMainWorld("api", {
 
     // Mark setup as complete
     complete: () => ipcRenderer.invoke("setup:complete"),
-    
+
     // List all databases in PostgreSQL
-    listDatabases: (credentials) => 
+    listDatabases: (credentials) =>
       ipcRenderer.invoke("setup:listDatabases", credentials),
-    
+
     // Check database schema (list tables and row counts)
     checkDatabaseSchema: (config) =>
       ipcRenderer.invoke("setup:checkDatabaseSchema", config),
-    
+
     // Get current database connection info
     getDatabaseInfo: () => ipcRenderer.invoke("setup:getDatabaseInfo"),
-    
+
     // Disconnect database
     disconnect: () => ipcRenderer.invoke("setup:disconnect"),
   },
@@ -130,6 +130,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   llm: {
     activeModel: () => ipcRenderer.invoke("llm:activeModel"),
+    ensureModelLoaded: (provider, model, baseUrl) => ipcRenderer.invoke("llm:ensureModelLoaded", { provider, model, baseUrl }),
   },
   auth: {
     login: (username, password) => ipcRenderer.invoke("auth:login", { username, password }),
@@ -207,7 +208,7 @@ contextBridge.exposeInMainWorld("api", {
     list: (filters) => ipcRenderer.invoke("audit:list", filters),
     getById: (id) => ipcRenderer.invoke("audit:getById", id),
     create: (data) => ipcRenderer.invoke("audit:create", data),
-    log: (entityType, entityId, action, performedBy, changes) => 
+    log: (entityType, entityId, action, performedBy, changes) =>
       ipcRenderer.invoke("audit:log", { entityType, entityId, action, performedBy, changes }),
     getByEntity: (entityType, entityId) => ipcRenderer.invoke("audit:getByEntity", { entityType, entityId }),
     getUserActivity: (userId, filters) => ipcRenderer.invoke("audit:getUserActivity", { userId, filters }),

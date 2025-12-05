@@ -27,6 +27,7 @@ import {
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import PromptConfig from "@/components/PromptConfig";
+import BioPromptConfig from "@/components/BioPromptConfig";
 import { FinancialIntelligenceEngine } from "@/services/financialIntelligenceEngine";
 import { sample13WeekCashflow, sampleBusinessLedgerSummary, sampleTaxDeadlines } from "@/data/sampleFinancials";
 import type { FinancialAlert, FinancialRecommendation } from "@/types/financial";
@@ -484,6 +485,11 @@ export default function Settings() {
     components: []
   });
   const [isRefreshingHealth, setIsRefreshingHealth] = useState(false);
+  const [enableBioPolishing, setEnableBioPolishing] = useState(false);
+  const [claudeApiKey, setClaudeApiKey] = useState("");
+  const [showClaudeKey, setShowClaudeKey] = useState(false);
+  const [bioPolishingPrompt, setBioPolishingPrompt] = useState("");
+  const [isSavingBioPrompt, setIsSavingBioPrompt] = useState(false);
 
   const { toast } = useToast();
 
@@ -537,6 +543,49 @@ export default function Settings() {
         if (apiKey) setScoringApiKey(apiKey);
       } catch (err) {
         console.error("Failed to load scoring_api_key:", err);
+      }
+
+      // Load bio polishing settings
+      try {
+        const bioPolishingEnabled = await (window.api as any).settings.getSetting("bio_polishing_enabled");
+        if (bioPolishingEnabled !== null && bioPolishingEnabled !== undefined) {
+          setEnableBioPolishing(bioPolishingEnabled === true || bioPolishingEnabled === "true");
+        }
+      } catch (e) {
+        console.warn("Failed to load bio polishing setting", e);
+      }
+
+      // Load Claude API key
+      try {
+        const claudeKey = await (window.api as any).settings.getSetting("claude_api_key");
+        if (claudeKey) setClaudeApiKey(claudeKey);
+      } catch (e) {
+        console.warn("Failed to load Claude API key", e);
+      }
+
+      // Load bio polishing prompt
+      try {
+        const prompt = await (window.api as any).settings.getSetting("bio_polishing_prompt");
+        if (prompt) {
+          setBioPolishingPrompt(prompt);
+        } else {
+          // Set default prompt
+          setBioPolishingPrompt(`You are an expert editor specializing in professional biographies for executive search.
+
+Your task is to polish and enhance the following candidate biography. Make it:
+1. More engaging and compelling while remaining professional
+2. Better structured with clear flow
+3. More impactful in highlighting achievements and expertise
+4. Polished in language and tone
+5. Between 150-250 words (maintain or adjust to this range)
+
+Original bio:
+{{bio}}
+
+Return ONLY the polished biography text, no markdown, no comments, just the enhanced biography.`);
+        }
+      } catch (e) {
+        console.warn("Failed to load bio polishing prompt", e);
       }
     };
 
@@ -1275,6 +1324,176 @@ export default function Settings() {
               <AIConfigCard />
               <div className="pt-4">
                 <PromptConfig />
+              </div>
+              <div className="pt-4 border-t">
+                <BioPromptConfig />
+              </div>
+              
+              {/* Bio Polishing Configuration - Separate from AI Config */}
+              <div className="pt-6 border-t">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Bio Polishing with Claude Sonnet</CardTitle>
+                    <CardDescription>
+                      Optionally polish candidate bios using Claude Sonnet for enhanced quality
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="bio-polishing">Enable Bio Polishing</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When enabled, generated bios will be polished using Claude Sonnet for better quality
+                        </p>
+                      </div>
+                      <Switch
+                        id="bio-polishing"
+                        checked={enableBioPolishing}
+                        onCheckedChange={async (checked) => {
+                          setEnableBioPolishing(checked);
+                          try {
+                            await (window.api as any).settings.setSetting("bio_polishing_enabled", checked);
+                            toast({
+                              title: "Saved",
+                              description: `Bio polishing ${checked ? "enabled" : "disabled"}`,
+                            });
+                          } catch (err) {
+                            toast({
+                              title: "Error",
+                              description: String(err),
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {enableBioPolishing && (
+                      <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                        <div className="space-y-2">
+                          <Label htmlFor="claude-api-key">Claude API Key</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="claude-api-key"
+                              type={showClaudeKey ? "text" : "password"}
+                              value={claudeApiKey}
+                              onChange={(e) => setClaudeApiKey(e.target.value)}
+                              placeholder="sk-ant-..."
+                            />
+                            <Button
+                              variant="ghost"
+                              onClick={() => setShowClaudeKey((s) => !s)}
+                            >
+                              {showClaudeKey ? "Hide" : "Show"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={async () => {
+                                try {
+                                  await (window.api as any).settings.setSetting("claude_api_key", claudeApiKey || "");
+                                  toast({
+                                    title: "Saved",
+                                    description: "Claude API key saved",
+                                  });
+                                } catch (err) {
+                                  toast({
+                                    title: "Error",
+                                    description: String(err),
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                            >
+                              Save Key
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Required for bio polishing. Get your API key from{" "}
+                            <a
+                              href="https://console.anthropic.com/"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              Anthropic Console
+                            </a>
+                          </p>
+                        </div>
+
+                        <div className="space-y-3 border-t pt-4">
+                          <div>
+                            <Label htmlFor="bio-polishing-prompt">Bio Polishing Prompt</Label>
+                            <p className="text-sm text-muted-foreground">
+                              You can use <code>{"{{bio}}"}</code> (without quotes) as a placeholder
+                              where the original bio will be injected. Claude Sonnet will use this prompt to polish the bio.
+                            </p>
+                          </div>
+                          <Textarea
+                            id="bio-polishing-prompt"
+                            value={bioPolishingPrompt}
+                            onChange={(e) => setBioPolishingPrompt(e.target.value)}
+                            rows={8}
+                            className="font-mono text-sm"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={async () => {
+                                setIsSavingBioPrompt(true);
+                                try {
+                                  await (window.api as any).settings.setSetting("bio_polishing_prompt", bioPolishingPrompt);
+                                  toast({
+                                    title: "Saved",
+                                    description: "Bio polishing prompt saved",
+                                  });
+                                } catch (err) {
+                                  toast({
+                                    title: "Error",
+                                    description: String(err),
+                                    variant: "destructive",
+                                  });
+                                } finally {
+                                  setIsSavingBioPrompt(false);
+                                }
+                              }}
+                              disabled={isSavingBioPrompt}
+                            >
+                              {isSavingBioPrompt ? "Saving..." : "Save Prompt"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                const defaultPrompt = `You are an expert editor specializing in professional biographies for executive search.
+
+Your task is to polish and enhance the following candidate biography. Make it:
+1. More engaging and compelling while remaining professional
+2. Better structured with clear flow
+3. More impactful in highlighting achievements and expertise
+4. Polished in language and tone
+5. Between 150-250 words (maintain or adjust to this range)
+
+Original bio:
+{{bio}}
+
+Return ONLY the polished biography text, no markdown, no comments, just the enhanced biography.`;
+                                setBioPolishingPrompt(defaultPrompt);
+                              }}
+                            >
+                              Reset to default
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          <p className="text-sm text-blue-700 dark:text-blue-300">
+                            Bio polishing will use Claude Sonnet 4 to enhance the quality and professionalism of
+                            generated candidate bios. This is an optional step that runs after initial bio generation.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>

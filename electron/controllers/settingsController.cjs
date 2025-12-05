@@ -6,6 +6,7 @@ const {
   getAllCVPaths,
   setCVStoragePath,
 } = require("../models/settingsModel.cjs");
+const { ensureModelLoaded } = require("../services/llmAdapter.cjs");
 
 function registerSettingsIpcHandlers() {
   ipcMain.handle("settings:getSetting", async (_event, key) => {
@@ -48,6 +49,19 @@ function registerSettingsIpcHandlers() {
       return 'gpt-4o';
     } catch (e) {
       return 'gpt-4o';
+    }
+  });
+
+  ipcMain.handle("llm:ensureModelLoaded", async (_event, { provider, model, baseUrl }) => {
+    try {
+      const result = await ensureModelLoaded(provider, model, baseUrl);
+      // Create a completely new plain object for IPC serialization
+      // This ensures no SDK objects leak through the promise chain
+      const success = result && result.success === true;
+      const error = result && result.error ? String(result.error) : null;
+      return JSON.parse(JSON.stringify({ success, error }));
+    } catch (err) {
+      return { success: false, error: err && err.message ? String(err.message) : 'Unknown error' };
     }
   });
 }

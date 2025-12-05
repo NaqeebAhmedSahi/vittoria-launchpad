@@ -1200,6 +1200,222 @@ function normalizeParsedCvForScoring(parsedCv) {
 }
 
 /**
+ * Anonymize bio text by removing personal information
+ * @param {string} bio - The bio text to anonymize
+ * @returns {string} - Anonymized bio text
+ */
+function anonymizeBio(bio) {
+  if (!bio || typeof bio !== 'string') return bio;
+  
+  let anonymized = bio;
+  
+  // Remove email addresses
+  anonymized = anonymized.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]');
+  
+  // Remove phone numbers (various formats)
+  anonymized = anonymized.replace(/(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, '[phone]');
+  anonymized = anonymized.replace(/\+\d{1,3}[\s-]?\d{1,4}[\s-]?\d{1,4}[\s-]?\d{1,9}/g, '[phone]');
+  
+  // Remove URLs (but keep domain names in context)
+  anonymized = anonymized.replace(/https?:\/\/[^\s]+/gi, '[url]');
+  anonymized = anonymized.replace(/www\.[^\s]+/gi, '[url]');
+  
+  // Remove LinkedIn/GitHub profile URLs specifically
+  anonymized = anonymized.replace(/linkedin\.com\/in\/[^\s]+/gi, '[linkedin]');
+  anonymized = anonymized.replace(/github\.com\/[^\s]+/gi, '[github]');
+  
+  return anonymized;
+}
+
+/**
+ * Generate a professional bio from parsed CV data using LLM
+ * @param {object} parsedCv - The parsed CV data (complete JSON)
+ * @returns {Promise<string>} - Generated bio text
+ */
+async function generateCandidateBio(parsedCv) {
+  const llmAdapter = require("../services/llmAdapter.cjs");
+  const { getSetting } = require("./settingsModel.cjs");
+  
+  // Get configured bio generation prompt
+  const bioPromptTemplate = await getSetting("bio_generation_prompt");
+  const DEFAULT_BIO_PROMPT = `ROLE: Professional Bio Writer
+You write concise, technical candidate biographies for executive search purposes.
+
+TASK
+Generate a professional biography (150-250 words) based on the parsed resume JSON provided.
+Focus on:
+- Career highlights and progression
+- Technical expertise and skills
+- Key achievements and impact
+- Industry experience
+- Educational background (if relevant)
+
+STYLE
+- Write in third person
+- Professional, executive-level tone
+- Technical and specific (mention technologies, methodologies, industries)
+- Quantify achievements where possible
+- Avoid personal information (names, emails, phone numbers will be removed later)
+
+OUTPUT
+Return ONLY the biography text. No markdown, no formatting, no JSON wrapper.
+Just the biography paragraph(s).
+
+Parsed Resume JSON:
+{{json}}`;
+
+  const userPromptTemplate = bioPromptTemplate || DEFAULT_BIO_PROMPT;
+  
+  // Replace {{json}} placeholder with the complete parsed CV JSON
+  const userPrompt = userPromptTemplate.includes("{{json}}")
+    ? userPromptTemplate.replace(/{{json}}/g, JSON.stringify(parsedCv, null, 2))
+    : `${userPromptTemplate}\n\nParsed Resume JSON:\n${JSON.stringify(parsedCv, null, 2)}`;
+
+  const systemPrompt = `ROLE: Professional Bio Writer
+You write concise, technical candidate biographies for executive search purposes.
+Return ONLY the biography text - no markdown, no JSON wrapper, no formatting.`;
+
+  try {
+    console.log("[generateCandidateBio] Generating bio from parsed CV JSON...");
+    const bio = await llmAdapter.chat(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      { temperature: 0.7, max_tokens: 500 }
+    );
+    
+    // Clean up the response
+    let cleanedBio = String(bio || "")
+      .replace(/```/g, "")
+      .replace(/^bio:?\s*/i, "")
+      .replace(/^json:?\s*/i, "")
+      .trim();
+    
+    // Remove any JSON wrapper if present
+    const jsonMatch = cleanedBio.match(/\{[\s\S]*"bio"[\s\S]*:[\s\S]*"([^"]+)"[\s\S]*\}/i);
+    if (jsonMatch && jsonMatch[1]) {
+      cleanedBio = jsonMatch[1];
+    }
+    
+    console.log(`[generateCandidateBio] Bio generated: ${cleanedBio.length} characters`);
+    
+    // Check if Claude polishing is enabled
+    const claudePolishingEnabled = await getSetting("bio_polishing_enabled");
+    if (claudePolishingEnabled === true || claudePolishingEnabled === "true") {
+      console.log("[generateCandidateBio] Claude polishing enabled, polishing bio...");
+      
+      try {
+        // Anonymize the bio before sending to Claude
+        const anonymizedBio = anonymizeBio(cleanedBio);
+        console.log("[generateCandidateBio] Bio anonymized for Claude polishing");
+        
+        // Get active provider to check if Claude is available
+        const { getActiveProvider } = require("../services/llmAdapter.cjs");
+        const provider = await getActiveProvider();
+        
+        // If Claude is not the active provider, temporarily use Claude for polishing
+        const polishingPrompt = `You are a professional bio editor. Polish the following candidate biography to make it more professional, concise, and impactful. Maintain the technical accuracy and third-person perspective. Return ONLY the polished biography text, no markdown, no formatting.
+
+Original biography:
+${anonymizedBio}`;
+
+        let polishedBio;
+        if (provider && provider.name === "claude") {
+          // Use active Claude provider
+          polishedBio = await llmAdapter.chat(
+            [
+              { role: "system", content: "You are a professional bio editor. Polish candidate biographies for executive search purposes." },
+              { role: "user", content: polishingPrompt },
+            ],
+            { temperature: 0.5, max_tokens: 600, model: "claude-sonnet-4-20250514" }
+          );
+        } else {
+          // Try to use Claude directly (check if Claude API key exists)
+          const claudeKey = await getSetting("claude_api_key");
+          if (claudeKey) {
+            // Temporarily set Claude as provider for this call
+            const originalProviders = await getSetting("llm_providers");
+            try {
+              // Create temporary Claude provider config
+              const tempProviders = typeof originalProviders === 'string' 
+                ? JSON.parse(originalProviders) 
+                : (originalProviders || {});
+              
+              const tempClaudeProvider = {
+                ...tempProviders,
+                claude: {
+                  key: claudeKey,
+                  isActive: true,
+                  model: "claude-sonnet-4-20250514"
+                }
+              };
+              
+              // Temporarily activate Claude
+              Object.keys(tempClaudeProvider).forEach(k => {
+                if (k !== 'claude' && tempClaudeProvider[k]) {
+                  tempClaudeProvider[k].isActive = false;
+                }
+              });
+              
+              await require("./settingsModel.cjs").setSetting("llm_providers", JSON.stringify(tempClaudeProvider));
+              
+              // Generate polished bio
+              polishedBio = await llmAdapter.chat(
+                [
+                  { role: "system", content: "You are a professional bio editor. Polish candidate biographies for executive search purposes." },
+                  { role: "user", content: polishingPrompt },
+                ],
+                { temperature: 0.5, max_tokens: 600, model: "claude-sonnet-4-20250514" }
+              );
+              
+              // Restore original providers
+              if (originalProviders) {
+                await require("./settingsModel.cjs").setSetting("llm_providers", originalProviders);
+              }
+            } catch (claudeErr) {
+              console.warn("[generateCandidateBio] Claude polishing failed, using original bio:", claudeErr.message);
+              // Restore original providers on error
+              if (originalProviders) {
+                await require("./settingsModel.cjs").setSetting("llm_providers", originalProviders);
+              }
+              polishedBio = cleanedBio;
+            }
+          } else {
+            console.warn("[generateCandidateBio] Claude API key not found, skipping polishing");
+            polishedBio = cleanedBio;
+          }
+        }
+        
+        // Clean up polished bio
+        polishedBio = String(polishedBio || cleanedBio)
+          .replace(/```/g, "")
+          .replace(/^bio:?\s*/i, "")
+          .replace(/^polished:?\s*/i, "")
+          .trim();
+        
+        console.log(`[generateCandidateBio] Bio polished: ${polishedBio.length} characters`);
+        return polishedBio;
+      } catch (polishErr) {
+        console.warn("[generateCandidateBio] Claude polishing failed, using original bio:", polishErr.message);
+        return cleanedBio;
+      }
+    }
+    
+    return cleanedBio;
+  } catch (err) {
+    console.warn("[generateCandidateBio] Failed to generate bio:", err.message);
+    // Return a fallback bio based on available data
+    const name = parsedCv.candidate?.full_name || parsedCv.name || "The candidate";
+    const currentTitle = parsedCv.candidate?.current_titles?.[0] || parsedCv.current_title || "";
+    const currentFirm = parsedCv.experience?.[0]?.company || parsedCv.current_firm || "";
+    const summary = parsedCv.summary || "";
+    const fallbackBio = `${name}${currentTitle ? ` is ${currentTitle}` : ""}${currentFirm ? ` at ${currentFirm}` : ""}.${summary ? ` ${summary.slice(0, 200)}` : ""}`;
+    return fallbackBio || "";
+  }
+}
+
+/**
  * Process a parsed CV: compute quality, save results, and auto-create candidate if threshold met
  * Returns: { status, qualityScore, candidateId? }
  */
@@ -1483,6 +1699,17 @@ Return ONLY the candidate JSON object with confidence and provenance metadata.`;
     console.log(`✅ Updated Quality Score: ${finalQualityResult.score.toFixed(4)} (${(finalQualityResult.score * 100).toFixed(2)}%)`);
 
     if (finalQualityResult.score >= thresholds.good) {
+      // Generate bio from parsed CV before creating candidate
+      console.log("[processParsedCv] Generating candidate bio...");
+      try {
+        const bio = await generateCandidateBio(parsedCv);
+        candidateJson.bio = bio;
+        console.log("[processParsedCv] Bio generated successfully");
+      } catch (bioErr) {
+        console.warn("[processParsedCv] Bio generation failed, continuing without bio:", bioErr.message);
+        candidateJson.bio = null;
+      }
+      
       // createDraftCandidate uses pool-based query (outside client transaction)
       candidateId = await createDraftCandidate(candidateJson);
       console.log(
@@ -1672,6 +1899,17 @@ async function createCandidateFromIntake(intakeId) {
     const parsedCv = typeof row.parsed_json === 'string' 
       ? JSON.parse(row.parsed_json) 
       : row.parsed_json;
+
+    // Generate bio from parsed CV before creating candidate
+    console.log("[createCandidateFromIntake] Generating candidate bio...");
+    try {
+      const bio = await generateCandidateBio(parsedCv);
+      parsedCv.bio = bio;
+      console.log("[createCandidateFromIntake] Bio generated successfully");
+    } catch (bioErr) {
+      console.warn("[createCandidateFromIntake] Bio generation failed, continuing without bio:", bioErr.message);
+      parsedCv.bio = null;
+    }
 
     const candidateId = await createDraftCandidate(parsedCv);
 

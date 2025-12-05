@@ -27,9 +27,21 @@ import {
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import PromptConfig from "@/components/PromptConfig";
+import BioPromptConfig from "@/components/BioPromptConfig";
 import { FinancialIntelligenceEngine } from "@/services/financialIntelligenceEngine";
 import { sample13WeekCashflow, sampleBusinessLedgerSummary, sampleTaxDeadlines } from "@/data/sampleFinancials";
 import type { FinancialAlert, FinancialRecommendation } from "@/types/financial";
+
+// Helper function to get display name for provider
+function getProviderDisplayName(providerName: string): string {
+  const providerMap: Record<string, string> = {
+    "openai": "OpenAI",
+    "google": "Google",
+    "llmstudio": "Local (LLMStudio)",
+    "local": "Local (Ollama)",
+  };
+  return providerMap[providerName] || providerName;
+}
 
 function AIConfigCard() {
   const { toast } = useToast();
@@ -41,6 +53,8 @@ function AIConfigCard() {
   // Model now forced (read-only) to pro tier based on provider
   const [model, setModel] = useState("gpt-4o");
   const [activeModel, setActiveModel] = useState("");
+  const [baseUrl, setBaseUrl] = useState("http://localhost:11434/v1");
+  const [localModel, setLocalModel] = useState("llama3");
 
   useEffect(() => {
     (async () => {
@@ -66,6 +80,9 @@ function AIConfigCard() {
               setProvider(name);
               if (info && (info as any).key) setApiKey((info as any).key);
               if (info && (info as any).model) setModel((info as any).model);
+              if (info && (info as any).baseUrl) setBaseUrl((info as any).baseUrl);
+              if (name === 'local' && (info as any).model) setLocalModel((info as any).model);
+              if (name === 'llmstudio' && (info as any).model) setLocalModel((info as any).model);
             }
           } catch (e) {
             console.warn("Failed to parse llm_providers setting", e);
@@ -86,10 +103,29 @@ function AIConfigCard() {
 
   // When provider changes, force model to pro variant (OpenAI gpt-4o, Google gemini-2.5-pro)
   useEffect(() => {
-    const forced = provider === "google" ? "gemini-2.5-pro" : "gpt-4o";
+    let forced = "gpt-4o";
+    if (provider === "google") forced = "gemini-2.5-pro";
+    else if (provider === "local") forced = localModel || "qwen2.5:7b";
+    else if (provider === "llmstudio") forced = localModel || "qwen2.5-7b-instruct";
+
     setModel(forced);
     const info = providersMap && providersMap[provider];
-    if (info && info.key) setApiKey(info.key);
+    if (info) {
+      if (info.key) setApiKey(info.key);
+      if (info.baseUrl) setBaseUrl(info.baseUrl);
+      if (info.model && (provider === "local" || provider === "llmstudio")) setLocalModel(info.model);
+    } else {
+      // Defaults for new provider selection
+      if (provider === "local") {
+        setBaseUrl("http://localhost:11434/");
+        setLocalModel("llama3");
+        setApiKey(""); // Clear key for local as it might be empty
+      } else if (provider === "llmstudio") {
+        setBaseUrl("http://localhost:1234/v1");
+        setLocalModel("qwen2.5-7b-instruct");
+        setApiKey("lm-studio"); // Dummy key usually needed
+      }
+    }
   }, [provider, providersMap]);
 
   const handleSave = async () => {
@@ -114,7 +150,7 @@ function AIConfigCard() {
   };
 
   const handleSaveProvider = async () => {
-    if (!apiKey)
+    if (!apiKey && provider !== "local" && provider !== "llmstudio")
       return toast({
         title: "No key",
         description: "Please enter an API key",
@@ -122,23 +158,42 @@ function AIConfigCard() {
       });
     setIsSaving(true);
     try {
+      // For local providers, ensure the model is loaded/available
+      if (provider === "local" || provider === "llmstudio") {
+        toast({
+          title: "Loading Model...",
+          description: `Checking availability of ${localModel}...`,
+        });
+
+        const result = await (window.api as any).llm.ensureModelLoaded(
+          provider,
+          localModel,
+          baseUrl
+        );
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load model");
+        }
+      }
+
       // Save provider key and mark it active (disconnect others)
       const newMap = { ...(providersMap || {}) };
       // store only the key and active flag; keep created_at for debugging
       Object.keys(newMap).forEach((k) => {
         if (newMap[k]) newMap[k].isActive = false;
       });
-      const forcedModel = provider === "google" ? "gemini-2.5-pro" : "gpt-4o";
+      const forcedModel = provider === "google" ? "gemini-2.5-pro" : ((provider === "local" || provider === "llmstudio") ? localModel : "gpt-4o");
       newMap[provider] = {
         key: apiKey,
         isActive: true,
         model: forcedModel,
+        baseUrl: (provider === "local" || provider === "llmstudio") ? baseUrl : undefined,
         updated_at: new Date().toISOString(),
       };
       await persistProviders(newMap);
       toast({
         title: "Saved",
-        description: `${provider} key saved and connected`,
+        description: `${provider} connected and model loaded`,
       });
       setModel(forcedModel);
       setActiveModel(forcedModel);
@@ -179,15 +234,20 @@ function AIConfigCard() {
   };
 
   const handleTest = async () => {
-    if (!apiKey)
+    if (!apiKey && provider !== "local" && provider !== "llmstudio")
       return toast({
         title: "No key",
         description: "Please enter an API key first",
         variant: "destructive",
       });
     try {
-      const resp = await fetch("https://api.openai.com/v1/models", {
-        headers: { Authorization: `Bearer ${apiKey}` },
+      let url = "https://api.openai.com/v1/models";
+      if ((provider === "local" || provider === "llmstudio") && baseUrl) {
+        url = `${baseUrl.replace(/\/+$/, "")}/models`;
+      }
+
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey || "dummy"}` },
       });
       if (!resp.ok) {
         const text = await resp.text();
@@ -221,28 +281,75 @@ function AIConfigCard() {
               <SelectContent>
                 <SelectItem value="openai">OpenAI</SelectItem>
                 <SelectItem value="google">Google</SelectItem>
+                <SelectItem value="llmstudio">Local (LLMStudio)</SelectItem>
+                <SelectItem value="local">Local (Ollama)</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label htmlFor="openai-key">Key</Label>
-            <div className="flex gap-2">
-              <Input
-                id="openai-key"
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-... or key"
-              />
-              <Button variant="ghost" onClick={() => setShowKey((s) => !s)}>
-                {showKey ? "Hide" : "Show"}
-              </Button>
-            </div>
-          </div>
-          <div>
-            <Label>Model (read-only)</Label>
-            <Input value={model} readOnly className="bg-muted/40" />
-          </div>
+
+          {provider === "local" || provider === "llmstudio" ? (
+            <>
+              <div className="col-span-2 grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="base-url">Base URL</Label>
+                  <Input
+                    id="base-url"
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder={provider === "llmstudio" ? "http://localhost:1234/v1" : "http://localhost:11434/v1"}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="local-model">Model Name</Label>
+                  <Select value={localModel} onValueChange={setLocalModel}>
+                    <SelectTrigger id="local-model">
+                      <SelectValue placeholder="Select a model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {provider === "local" ? (
+                        <>
+                          <SelectItem value="qwen2.5:7b">qwen2.5:7b</SelectItem>
+                          <SelectItem value="llama3.2">llama3.2</SelectItem>
+                          <SelectItem value="llama3.1">llama3.1</SelectItem>
+                          <SelectItem value="mistral">mistral</SelectItem>
+                          <SelectItem value="gemma2">gemma2</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="qwen2.5-7b-instruct">Qwen2.5-7B-Instruct</SelectItem>
+                          <SelectItem value="gpt-oss-120b">OpenAI GPT OSS 120B</SelectItem>
+                          <SelectItem value="openai/gpt-oss-20b">OpenAI GPT OSS 20B</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {/* API Key hidden for local providers */}
+            </>
+          ) : (
+            <>
+              <div>
+                <Label htmlFor="openai-key">Key</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="openai-key"
+                    type={showKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                  />
+                  <Button variant="ghost" onClick={() => setShowKey((s) => !s)}>
+                    {showKey ? "Hide" : "Show"}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label>Model (read-only)</Label>
+                <Input value={model} readOnly className="bg-muted/40" />
+              </div>
+            </>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
           Keys are stored locally in application settings. Only one provider can be connected at a
@@ -257,9 +364,11 @@ function AIConfigCard() {
         <Button onClick={handleSaveProvider} disabled={isSaving}>
           {isSaving ? "Saving..." : `Save & Connect ${provider}`}
         </Button>
-        <Button variant="outline" onClick={handleTest}>
-          Test Key
-        </Button>
+        {provider !== "local" && provider !== "llmstudio" && (
+          <Button variant="outline" onClick={handleTest}>
+            Test Key
+          </Button>
+        )}
       </div>
 
       <div className="mt-6 space-y-2">
@@ -279,17 +388,16 @@ function AIConfigCard() {
           {Object.entries(providersMap || {}).map(([name, info]) => (
             <div key={name} className="flex items-center justify-between p-3 border rounded-lg">
               <div>
-                <div className="font-medium capitalize">{name}</div>
+                <div className="font-medium">{getProviderDisplayName(name)}</div>
                 <div className="text-sm text-muted-foreground">
                   {info.model
-                    ? `${info.model} · ${
-                        info.updated_at
-                          ? `Updated: ${new Date(info.updated_at).toLocaleString()}`
-                          : ""
-                      }`
+                    ? `${info.model} · ${info.updated_at
+                      ? `Updated: ${new Date(info.updated_at).toLocaleString()}`
+                      : ""
+                    }`
                     : info.updated_at
-                    ? `Updated: ${new Date(info.updated_at).toLocaleString()}`
-                    : ""}
+                      ? `Updated: ${new Date(info.updated_at).toLocaleString()}`
+                      : ""}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -346,7 +454,7 @@ export default function Settings() {
   const [scoringApiEndpoint, setScoringApiEndpoint] = useState("");
   const [scoringApiKey, setScoringApiKey] = useState("");
   const [isSavingScoring, setIsSavingScoring] = useState(false);
-  
+
   // Database connection state
   const [dbInfo, setDbInfo] = useState<{
     connected: boolean;
@@ -360,7 +468,7 @@ export default function Settings() {
   }>({ connected: false });
   const [isLoadingDb, setIsLoadingDb] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  
+
   // Health check state
   const [healthStatus, setHealthStatus] = useState<{
     overall: 'operational' | 'degraded' | 'outage';
@@ -377,7 +485,12 @@ export default function Settings() {
     components: []
   });
   const [isRefreshingHealth, setIsRefreshingHealth] = useState(false);
-  
+  const [enableBioPolishing, setEnableBioPolishing] = useState(false);
+  const [claudeApiKey, setClaudeApiKey] = useState("");
+  const [showClaudeKey, setShowClaudeKey] = useState(false);
+  const [bioPolishingPrompt, setBioPolishingPrompt] = useState("");
+  const [isSavingBioPrompt, setIsSavingBioPrompt] = useState(false);
+
   const { toast } = useToast();
 
   // Load CV storage path and scoring API settings on component mount
@@ -407,7 +520,7 @@ export default function Settings() {
       } finally {
         setIsLoadingDb(false);
       }
-      
+
       // Load CV storage path
       try {
         const path = await (window.api as any).settings.getCVStoragePath();
@@ -431,6 +544,49 @@ export default function Settings() {
       } catch (err) {
         console.error("Failed to load scoring_api_key:", err);
       }
+
+      // Load bio polishing settings
+      try {
+        const bioPolishingEnabled = await (window.api as any).settings.getSetting("bio_polishing_enabled");
+        if (bioPolishingEnabled !== null && bioPolishingEnabled !== undefined) {
+          setEnableBioPolishing(bioPolishingEnabled === true || bioPolishingEnabled === "true");
+        }
+      } catch (e) {
+        console.warn("Failed to load bio polishing setting", e);
+      }
+
+      // Load Claude API key
+      try {
+        const claudeKey = await (window.api as any).settings.getSetting("claude_api_key");
+        if (claudeKey) setClaudeApiKey(claudeKey);
+      } catch (e) {
+        console.warn("Failed to load Claude API key", e);
+      }
+
+      // Load bio polishing prompt
+      try {
+        const prompt = await (window.api as any).settings.getSetting("bio_polishing_prompt");
+        if (prompt) {
+          setBioPolishingPrompt(prompt);
+        } else {
+          // Set default prompt
+          setBioPolishingPrompt(`You are an expert editor specializing in professional biographies for executive search.
+
+Your task is to polish and enhance the following candidate biography. Make it:
+1. More engaging and compelling while remaining professional
+2. Better structured with clear flow
+3. More impactful in highlighting achievements and expertise
+4. Polished in language and tone
+5. Between 150-250 words (maintain or adjust to this range)
+
+Original bio:
+{{bio}}
+
+Return ONLY the polished biography text, no markdown, no comments, just the enhanced biography.`);
+        }
+      } catch (e) {
+        console.warn("Failed to load bio polishing prompt", e);
+      }
     };
 
     loadSettings();
@@ -450,137 +606,137 @@ export default function Settings() {
         category: 'core' | 'feature' | 'migration';
         description?: string;
       }> = [
-        // Core Services
-        {
-          name: 'Database Connection',
-          status: isDatabaseUp ? 'operational' : 'outage',
-          category: 'core',
-          description: isDatabaseUp ? `PostgreSQL ${dbStatus.version || ''}` : 'Cannot connect to database'
-        },
-        {
-          name: 'Authentication Service',
-          status: isDatabaseUp ? 'operational' : 'degraded',
-          category: 'core',
-          description: 'User authentication and session management'
-        },
-        {
-          name: 'File Storage',
-          status: 'operational',
-          category: 'core',
-          description: 'Local file system storage for CVs and documents'
-        },
-        {
-          name: 'LLM Service',
-          status: 'operational',
-          category: 'core',
-          description: 'AI-powered CV parsing and analysis'
-        },
-        
-        // Feature Modules
-        {
-          name: 'CV Intake & Parsing',
-          status: 'operational',
-          category: 'feature',
-          description: 'Upload and parse CV documents'
-        },
-        {
-          name: 'Candidate Management',
-          status: 'operational',
-          category: 'feature',
-          description: 'Create, update, and manage candidate profiles'
-        },
-        {
-          name: 'Mandate Management',
-          status: 'operational',
-          category: 'feature',
-          description: 'Job mandate creation and tracking'
-        },
-        {
-          name: 'Firm Management',
-          status: 'operational',
-          category: 'feature',
-          description: 'Client firm database and management'
-        },
-        {
-          name: 'Quality Scoring',
-          status: 'operational',
-          category: 'feature',
-          description: 'CV quality assessment and scoring'
-        },
-        {
-          name: 'Match Scoring Engine',
-          status: 'degraded',
-          category: 'feature',
-          description: 'Candidate-mandate matching (migration in progress)'
-        },
-        {
-          name: 'Team Management',
-          status: 'maintenance',
-          category: 'feature',
-          description: 'Planned for future release'
-        },
-        {
-          name: 'Deal Tracking',
-          status: 'maintenance',
-          category: 'feature',
-          description: 'Planned for future release'
-        },
-        {
-          name: 'Finance & Invoicing',
-          status: 'maintenance',
-          category: 'feature',
-          description: 'Planned for future release'
-        },
-        
-        // Database Migration Status
-        {
-          name: 'Authentication Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Settings Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Candidate Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Firm Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Mandate Model',
-          status: 'operational',
-          category: 'migration',
-          description: 'PostgreSQL migration complete'
-        },
-        {
-          name: 'Intake Model',
-          status: 'degraded',
-          category: 'migration',
-          description: 'Migration in progress - schema updated, functions being migrated'
-        },
-        {
-          name: 'Scoring Model',
-          status: 'degraded',
-          category: 'migration',
-          description: 'Migration pending'
-        }
-      ];
+          // Core Services
+          {
+            name: 'Database Connection',
+            status: isDatabaseUp ? 'operational' : 'outage',
+            category: 'core',
+            description: isDatabaseUp ? `PostgreSQL ${dbStatus.version || ''}` : 'Cannot connect to database'
+          },
+          {
+            name: 'Authentication Service',
+            status: isDatabaseUp ? 'operational' : 'degraded',
+            category: 'core',
+            description: 'User authentication and session management'
+          },
+          {
+            name: 'File Storage',
+            status: 'operational',
+            category: 'core',
+            description: 'Local file system storage for CVs and documents'
+          },
+          {
+            name: 'LLM Service',
+            status: 'operational',
+            category: 'core',
+            description: 'AI-powered CV parsing and analysis'
+          },
+
+          // Feature Modules
+          {
+            name: 'CV Intake & Parsing',
+            status: 'operational',
+            category: 'feature',
+            description: 'Upload and parse CV documents'
+          },
+          {
+            name: 'Candidate Management',
+            status: 'operational',
+            category: 'feature',
+            description: 'Create, update, and manage candidate profiles'
+          },
+          {
+            name: 'Mandate Management',
+            status: 'operational',
+            category: 'feature',
+            description: 'Job mandate creation and tracking'
+          },
+          {
+            name: 'Firm Management',
+            status: 'operational',
+            category: 'feature',
+            description: 'Client firm database and management'
+          },
+          {
+            name: 'Quality Scoring',
+            status: 'operational',
+            category: 'feature',
+            description: 'CV quality assessment and scoring'
+          },
+          {
+            name: 'Match Scoring Engine',
+            status: 'degraded',
+            category: 'feature',
+            description: 'Candidate-mandate matching (migration in progress)'
+          },
+          {
+            name: 'Team Management',
+            status: 'maintenance',
+            category: 'feature',
+            description: 'Planned for future release'
+          },
+          {
+            name: 'Deal Tracking',
+            status: 'maintenance',
+            category: 'feature',
+            description: 'Planned for future release'
+          },
+          {
+            name: 'Finance & Invoicing',
+            status: 'maintenance',
+            category: 'feature',
+            description: 'Planned for future release'
+          },
+
+          // Database Migration Status
+          {
+            name: 'Authentication Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Settings Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Candidate Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Firm Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Mandate Model',
+            status: 'operational',
+            category: 'migration',
+            description: 'PostgreSQL migration complete'
+          },
+          {
+            name: 'Intake Model',
+            status: 'degraded',
+            category: 'migration',
+            description: 'Migration in progress - schema updated, functions being migrated'
+          },
+          {
+            name: 'Scoring Model',
+            status: 'degraded',
+            category: 'migration',
+            description: 'Migration pending'
+          }
+        ];
 
       // Determine overall status
       const hasOutage = components.some(c => c.status === 'outage');
       const hasDegraded = components.some(c => c.status === 'degraded');
-      
+
       setHealthStatus({
         overall: hasOutage ? 'outage' : hasDegraded ? 'degraded' : 'operational',
         lastChecked: new Date(),
@@ -664,7 +820,7 @@ export default function Settings() {
     if (!confirm("Are you sure you want to disconnect the database? You will need to reconfigure the connection.")) {
       return;
     }
-    
+
     setIsDisconnecting(true);
     try {
       const result = await (window.api as any).setup.disconnect();
@@ -674,7 +830,7 @@ export default function Settings() {
           description: "Database disconnected successfully. Reloading application...",
         });
         setDbInfo({ connected: false });
-        
+
         // Reload the application to trigger setup check
         setTimeout(() => {
           window.location.reload();
@@ -721,11 +877,11 @@ export default function Settings() {
         <TabsContent value="health" className="space-y-6">
           {/* Overall Status Banner */}
           <Card className={
-            healthStatus.overall === 'operational' 
-              ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' 
+            healthStatus.overall === 'operational'
+              ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20'
               : healthStatus.overall === 'degraded'
-              ? 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/20'
-              : 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20'
+                ? 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/20'
+                : 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20'
           }>
             <CardContent className="pt-6">
               <div className="flex items-start justify-between">
@@ -1005,7 +1161,7 @@ export default function Settings() {
                     <Input id="db-user" value={dbInfo.username || ""} readOnly className="bg-muted" />
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <Button 
+                    <Button
                       variant="destructive"
                       onClick={handleDisconnectDatabase}
                       disabled={isDisconnecting}
@@ -1168,6 +1324,176 @@ export default function Settings() {
               <AIConfigCard />
               <div className="pt-4">
                 <PromptConfig />
+              </div>
+              <div className="pt-4 border-t">
+                <BioPromptConfig />
+              </div>
+              
+              {/* Bio Polishing Configuration - Separate from AI Config */}
+              <div className="pt-6 border-t">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Bio Polishing with Claude Sonnet</CardTitle>
+                    <CardDescription>
+                      Optionally polish candidate bios using Claude Sonnet for enhanced quality
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="bio-polishing">Enable Bio Polishing</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When enabled, generated bios will be polished using Claude Sonnet for better quality
+                        </p>
+                      </div>
+                      <Switch
+                        id="bio-polishing"
+                        checked={enableBioPolishing}
+                        onCheckedChange={async (checked) => {
+                          setEnableBioPolishing(checked);
+                          try {
+                            await (window.api as any).settings.setSetting("bio_polishing_enabled", checked);
+                            toast({
+                              title: "Saved",
+                              description: `Bio polishing ${checked ? "enabled" : "disabled"}`,
+                            });
+                          } catch (err) {
+                            toast({
+                              title: "Error",
+                              description: String(err),
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {enableBioPolishing && (
+                      <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                        <div className="space-y-2">
+                          <Label htmlFor="claude-api-key">Claude API Key</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="claude-api-key"
+                              type={showClaudeKey ? "text" : "password"}
+                              value={claudeApiKey}
+                              onChange={(e) => setClaudeApiKey(e.target.value)}
+                              placeholder="sk-ant-..."
+                            />
+                            <Button
+                              variant="ghost"
+                              onClick={() => setShowClaudeKey((s) => !s)}
+                            >
+                              {showClaudeKey ? "Hide" : "Show"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={async () => {
+                                try {
+                                  await (window.api as any).settings.setSetting("claude_api_key", claudeApiKey || "");
+                                  toast({
+                                    title: "Saved",
+                                    description: "Claude API key saved",
+                                  });
+                                } catch (err) {
+                                  toast({
+                                    title: "Error",
+                                    description: String(err),
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                            >
+                              Save Key
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Required for bio polishing. Get your API key from{" "}
+                            <a
+                              href="https://console.anthropic.com/"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              Anthropic Console
+                            </a>
+                          </p>
+                        </div>
+
+                        <div className="space-y-3 border-t pt-4">
+                          <div>
+                            <Label htmlFor="bio-polishing-prompt">Bio Polishing Prompt</Label>
+                            <p className="text-sm text-muted-foreground">
+                              You can use <code>{"{{bio}}"}</code> (without quotes) as a placeholder
+                              where the original bio will be injected. Claude Sonnet will use this prompt to polish the bio.
+                            </p>
+                          </div>
+                          <Textarea
+                            id="bio-polishing-prompt"
+                            value={bioPolishingPrompt}
+                            onChange={(e) => setBioPolishingPrompt(e.target.value)}
+                            rows={8}
+                            className="font-mono text-sm"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={async () => {
+                                setIsSavingBioPrompt(true);
+                                try {
+                                  await (window.api as any).settings.setSetting("bio_polishing_prompt", bioPolishingPrompt);
+                                  toast({
+                                    title: "Saved",
+                                    description: "Bio polishing prompt saved",
+                                  });
+                                } catch (err) {
+                                  toast({
+                                    title: "Error",
+                                    description: String(err),
+                                    variant: "destructive",
+                                  });
+                                } finally {
+                                  setIsSavingBioPrompt(false);
+                                }
+                              }}
+                              disabled={isSavingBioPrompt}
+                            >
+                              {isSavingBioPrompt ? "Saving..." : "Save Prompt"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                const defaultPrompt = `You are an expert editor specializing in professional biographies for executive search.
+
+Your task is to polish and enhance the following candidate biography. Make it:
+1. More engaging and compelling while remaining professional
+2. Better structured with clear flow
+3. More impactful in highlighting achievements and expertise
+4. Polished in language and tone
+5. Between 150-250 words (maintain or adjust to this range)
+
+Original bio:
+{{bio}}
+
+Return ONLY the polished biography text, no markdown, no comments, just the enhanced biography.`;
+                                setBioPolishingPrompt(defaultPrompt);
+                              }}
+                            >
+                              Reset to default
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          <p className="text-sm text-blue-700 dark:text-blue-300">
+                            Bio polishing will use Claude Sonnet 4 to enhance the quality and professionalism of
+                            generated candidate bios. This is an optional step that runs after initial bio generation.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>

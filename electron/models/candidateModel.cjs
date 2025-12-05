@@ -112,6 +112,8 @@ async function initCandidatesTable() {
  * Create a draft candidate from parsed CV data (PostgreSQL)
  */
 async function createDraftCandidate(parsedCv) {
+  // Check if bio column exists, if not we'll add it dynamically
+  // For now, we'll try to insert it and handle gracefully if column doesn't exist
   const result = await query(
     `INSERT INTO candidates (
       name,
@@ -123,8 +125,9 @@ async function createDraftCandidate(parsedCv) {
       asset_classes,
       geographies,
       seniority,
-      status
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      status,
+      bio
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     RETURNING id`,
     [
       // Ensure we never insert NULL into the name column. Use parsedCv.name,
@@ -138,9 +141,53 @@ async function createDraftCandidate(parsedCv) {
       JSON.stringify(parsedCv.asset_classes || []),
       JSON.stringify(parsedCv.geographies || []),
       parsedCv.seniority || null,
-      'DRAFT'
+      'DRAFT',
+      parsedCv.bio || null
     ]
-  );
+  ).catch(async (err) => {
+    // If bio column doesn't exist, try without it and add the column
+    if (err.message && err.message.includes('column "bio"')) {
+      console.log("[createDraftCandidate] Bio column doesn't exist, adding it...");
+      try {
+        await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS bio TEXT;`);
+        console.log("[createDraftCandidate] Bio column added successfully");
+      } catch (alterErr) {
+        console.warn("[createDraftCandidate] Failed to add bio column:", alterErr.message);
+      }
+      
+      // Retry insert with bio (column now exists)
+      return await query(
+        `INSERT INTO candidates (
+          name,
+          current_title,
+          current_firm,
+          location,
+          sectors,
+          functions,
+          asset_classes,
+          geographies,
+          seniority,
+          status,
+          bio
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id`,
+        [
+          parsedCv.name || parsedCv.full_name || parsedCv.current_title || parsedCv.current_firm || '',
+          parsedCv.current_title || null,
+          parsedCv.current_firm || null,
+          parsedCv.location || null,
+          JSON.stringify(parsedCv.sectors || []),
+          JSON.stringify(parsedCv.functions || []),
+          JSON.stringify(parsedCv.asset_classes || []),
+          JSON.stringify(parsedCv.geographies || []),
+          parsedCv.seniority || null,
+          'DRAFT',
+          parsedCv.bio || null
+        ]
+      );
+    }
+    throw err;
+  });
 
   return result.rows[0].id;
 }
@@ -201,6 +248,7 @@ async function getCandidateById(candidateId) {
       seniority,
       status,
       mandate_ids,
+      bio,
       created_at,
       updated_at
     FROM candidates
@@ -284,6 +332,7 @@ async function listCandidates(status = null) {
       seniority,
       status,
       mandate_ids,
+      bio,
       created_at,
       updated_at
     FROM candidates
@@ -660,6 +709,7 @@ async function searchCandidates(searchTerm) {
       geographies,
       seniority,
       status,
+      bio,
       created_at,
       updated_at
     FROM candidates

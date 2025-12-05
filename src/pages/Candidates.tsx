@@ -46,6 +46,7 @@ type UICandidate = {
   functions: string[];
   mandates: number;
   lastUpdated: string;
+  bio?: string | null;
 };
 
 // Helper: map DB row → UI candidate, with cleanup so Select never sees empty values
@@ -95,6 +96,7 @@ const updated = formatDate(row.updated_at) || formatDate(row.created_at);
     functions,
     mandates: mandateIds.length,
     lastUpdated: updated,
+    bio: row.bio || null,
   };
 }
 
@@ -750,6 +752,18 @@ export default function Candidates() {
                     {selectedCandidateData.location}
                   </div>
                 </div>
+
+                {/* Bio Section */}
+                {selectedCandidateData.bio && (
+                  <div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                      Professional Bio
+                    </div>
+                    <p className="text-sm leading-relaxed text-foreground">
+                      {selectedCandidateData.bio}
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">

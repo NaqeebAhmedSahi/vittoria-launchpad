@@ -631,6 +631,84 @@ async function chat(messages, opts = {}) {
     }
   }
 
+  // -------- Anthropic Claude provider --------
+  if (provider && provider.name === "claude") {
+    try {
+      let fetchFn = global.fetch;
+      if (!fetchFn) {
+        const nf = await import("node-fetch");
+        fetchFn = nf.default;
+      }
+
+      const claudeKey = (provider && provider.key) || (await getSetting("claude_api_key"));
+      if (!claudeKey) {
+        throw new Error("No Claude API key configured");
+      }
+
+      // Normalize model name
+      const modelId = model || "claude-sonnet-4-20250514";
+      const maxTokens = typeof opts.max_tokens === "number" ? opts.max_tokens : 4096;
+
+      const endpoint = "https://api.anthropic.com/v1/messages";
+
+      // Format messages for Claude API (system message is separate)
+      let systemMessage = "";
+      const claudeMessages = [];
+      
+      for (const msg of messages) {
+        if (msg.role === "system") {
+          systemMessage = msg.content;
+        } else {
+          claudeMessages.push({
+            role: msg.role === "assistant" ? "assistant" : "user",
+            content: msg.content,
+          });
+        }
+      }
+
+      const payload = {
+        model: modelId,
+        max_tokens: maxTokens,
+        temperature,
+        messages: claudeMessages,
+        ...(systemMessage ? { system: systemMessage } : {}),
+      };
+
+      console.log("[llmAdapter] Sending Claude request:", {
+        model: modelId,
+        temperature,
+        messagesCount: claudeMessages.length,
+      });
+
+      const resp = await fetchFn(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": claudeKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`Claude API error: ${resp.status} ${txt}`);
+      }
+
+      const j = await resp.json();
+      const content = j?.content?.[0]?.text || "";
+
+      if (!content || !content.trim()) {
+        console.warn("[llmAdapter] Claude returned empty content");
+      }
+
+      return content || "";
+    } catch (e) {
+      console.error("[llmAdapter] Claude API call failed:", e);
+      throw e;
+    }
+  }
+
   // -------- LLM Studio (LM Studio) provider --------
   if (provider && provider.name === "llmstudio") {
     const baseUrl = (provider.info && provider.info.baseUrl) || "http://localhost:1234/v1";
